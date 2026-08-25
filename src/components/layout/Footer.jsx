@@ -70,18 +70,13 @@ export const Footer = () => {
           {/* Legal Links */}
           <div>
             <h4 style={{ color: 'var(--accent)', marginBottom: '1.25rem', fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Legal & Admin
+              Information & Policies
             </h4>
             <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem' }}>
               <li><a href="#about" style={{ color: 'inherit' }}>About Us</a></li>
               <li><a href="#privacy" style={{ color: 'inherit' }}>Privacy Policy</a></li>
               <li><a href="#terms" style={{ color: 'inherit' }}>Terms of Service</a></li>
               <li><a href="#faq" style={{ color: 'inherit' }}>FAQ</a></li>
-              <li style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                <Link to="/admin/login" style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Shield size={14} /> Staff / Admin Login
-                </Link>
-              </li>
             </ul>
           </div>
 
@@ -143,9 +138,25 @@ export const Footer = () => {
           color: 'rgba(255, 255, 255, 0.5)'
         }}>
           <div>© {new Date().getFullYear()} The Quiet Desk. All rights reserved.</div>
-          <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
             <span>Crafted for Focus in Kathmandu</span>
-            <Link to="/admin/login" style={{ color: 'rgba(255,255,255,0.4)', textDecoration: 'none', fontSize: '0.8rem' }}>Admin Access</Link>
+            <Link
+              to="/admin/login"
+              title="Admin Portal"
+              style={{
+                color: 'rgba(255,255,255,0.3)',
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '4px',
+                borderRadius: '4px',
+                transition: 'color 0.2s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'}
+              onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.3)'}
+            >
+              <Shield size={14} />
+            </Link>
           </div>
         </div>
       </div>

@@ -5,10 +5,11 @@ import { Modal } from '../../components/common/Modal';
 import { CheckCircle2, Sparkles, UserCheck, Layers } from 'lucide-react';
 
 const ZONE_META = {
-  'Quiet Zone Alpha': { color: '#4A3C2B', light: '#F5EFE4', accent: '#C9A574', label: 'A', icon: '📚', rate: 500 },
-  'Window Nook':      { color: '#1A5C73', light: '#E6F4F8', accent: '#4BA3C3', label: 'B', icon: '🪟', rate: 700 },
-  'Private Pods':     { color: '#5C3A1E', light: '#FBF0E6', accent: '#D4845A', label: 'C', icon: '🔒', rate: 1200 },
-  'Collaborative Hub':{ color: '#2D5A27', light: '#EBF5E9', accent: '#5BAD52', label: 'D', icon: '💡', rate: 400 },
+  'Left Quiet Row (Zone A)':        { color: '#4A3C2B', light: '#F5EFE4', accent: '#C9A574', label: 'A', icon: '📚', rate: 500 },
+  'Center Focus Row (Zone C)':      { color: '#5C3A1E', light: '#FBF0E6', accent: '#D4845A', label: 'C', icon: '🎯', rate: 600 },
+  'Center T-Wing Section (Zone T)': { color: '#2D5A27', light: '#EBF5E9', accent: '#5BAD52', label: 'T', icon: '┴', rate: 550 },
+  'South Baseline Row (Zone B)':    { color: '#1E3A8A', light: '#EFF6FF', accent: '#3B82F6', label: 'B', icon: '📖', rate: 450 },
+  'Right Window Wall (Zone R)':     { color: '#1A5C73', light: '#E6F4F8', accent: '#4BA3C3', label: 'R', icon: '🪟', rate: 700 },
 };
 
 const STATUS_DOT = {
@@ -41,12 +42,22 @@ export const SeatMap = () => {
     }
   };
 
-  // Group filtered seats by zone
+  // Natural sort helper (e.g., A1, A2 ... A10, A11)
+  const naturalSort = (a, b) => {
+    return (a.seatNumber || '').localeCompare(b.seatNumber || '', undefined, { numeric: true, sensitivity: 'base' });
+  };
+
+  // Group filtered seats by zone and sort naturally
   const grouped = filteredSeats.reduce((acc, seat) => {
-    if (!acc[seat.zone]) acc[seat.zone] = [];
-    acc[seat.zone].push(seat);
+    const zoneName = seat.zone || 'Other Study Area';
+    if (!acc[zoneName]) acc[zoneName] = [];
+    acc[zoneName].push(seat);
     return acc;
   }, {});
+
+  Object.keys(grouped).forEach(zoneKey => {
+    grouped[zoneKey].sort(naturalSort);
+  });
 
   return (
     <section id="seats" className="section">
@@ -275,7 +286,7 @@ export const SeatMap = () => {
 
               <h5 style={{ marginBottom: '0.75rem', color: 'var(--primary)' }}>Included Amenities:</h5>
               <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 1.5rem 0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {[...activeModalSeat.amenities, 'Unlimited French Press Coffee & Tea'].map((item, i) => (
+                {[...(activeModalSeat.amenities || ['Ergonomic Mesh Chair', 'Dedicated Power Outlet', 'High-Speed Wi-Fi']), 'Unlimited French Press Coffee & Tea'].map((item, i) => (
                   <li key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
                     <CheckCircle2 size={16} color={meta.accent || 'var(--accent-hover)'} />
                     <span>{item}</span>

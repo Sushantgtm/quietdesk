@@ -67,31 +67,66 @@ export const fetchAllBookings = async () => {
   return getLocalBookings();
 };
 
+import { findOrCreateStudent } from './userService';
+
 export const createBooking = async (bookingData) => {
-  const bookingId = 'BK-' + Date.now();
-  const bookingCode = 'QD-' + Math.floor(1000 + Math.random() * 9000);
+  const bookingId = bookingData.id || ('BK-' + Date.now());
+  const bookingCode = bookingData.bookingCode || ('QD-' + Math.floor(1000 + Math.random() * 9000));
   
-  // Users can only RESERVE a seat — admin must confirm it
+  // 1. Ensure user is created/updated in the users table first
+  let userId = bookingData.userId || null;
+  let userCode = bookingData.userCode || null;
+  let userName = bookingData.userName || 'Scholar';
+
+  try {
+    const studentRes = await findOrCreateStudent({
+      fullName: bookingData.userName || 'Scholar',
+      name: bookingData.userName || 'Scholar',
+      email: bookingData.userEmail || '',
+      phone: bookingData.userPhone || '',
+      passType: bookingData.passType || 'DAILY',
+      assignedSeat: bookingData.seatNumber ? `Desk ${bookingData.seatNumber}` : '',
+      seatNumber: bookingData.seatNumber || '',
+      status: 'ACTIVE',
+      membershipStatus: 'ACTIVE'
+    });
+
+    if (studentRes && studentRes.user) {
+      userId = studentRes.user.id;
+      userCode = studentRes.user.userCode;
+      userName = studentRes.user.fullName || studentRes.user.name || userName;
+    }
+  } catch (userErr) {
+    console.warn('Unable to sync user record prior to booking creation:', userErr.message);
+  }
+
+  // 2. Build booking object linked to the user record
   const newBooking = {
     id: bookingId,
     bookingCode,
+    userId,
+    userCode,
+    userName,
     createdAt: new Date().toISOString(),
-    status: 'PENDING_CONFIRMATION',  // ← user creates a reservation, not a confirmed booking
-    paymentStatus: 'PENDING',
+    status: bookingData.status || 'PENDING_CONFIRMATION',
+    paymentStatus: bookingData.paymentStatus || 'PENDING',
     ...bookingData
   };
 
   // Update local storage for immediate reflection
   const currentLocal = getLocalBookings();
-  const updatedLocal = [newBooking, ...currentLocal];
+  const updatedLocal = [newBooking, ...currentLocal.filter(b => b.id !== bookingId)];
   saveLocalBookings(updatedLocal);
 
-  // Mark the desk as RESERVED (not OCCUPIED — admin confirms later)
-  await updateSeatStatusInFirestore(bookingData.seatId, 'RESERVED');
+  // Update seat status in Firestore
+  if (bookingData.seatId) {
+    const targetSeatStatus = newBooking.status === 'CONFIRMED' || newBooking.status === 'CHECKED_IN' ? 'OCCUPIED' : 'RESERVED';
+    await updateSeatStatusInFirestore(bookingData.seatId, targetSeatStatus);
+  }
 
   try {
-    await setDoc(doc(db, 'bookings', bookingId), newBooking);
-    console.log('Reservation committed to Firestore (PENDING_CONFIRMATION):', bookingId);
+    await setDoc(doc(db, 'bookings', bookingId), newBooking, { merge: true });
+    console.log(`✅ Reservation ${bookingCode} linked to user ${userId} committed to Firestore:`, bookingId);
     return newBooking;
   } catch (e) {
     console.warn('Firestore write failed, stored locally:', e.message);

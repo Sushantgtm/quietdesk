@@ -2,16 +2,18 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { subscribeSeatAvailability, updateSeatStatusInFirestore, updateSeatDetailsInFirestore, createSeatInFirestore, deleteSeatInFirestore } from '../services/firebase/seatService';
 import { subscribeBookings, createBooking as createBookingService, updateBookingStatus, confirmBooking as confirmBookingService, updateBookingPaymentStatus, updateBookingDetails as updateBookingDetailsService } from '../services/firebase/bookingService';
 import { subscribePlans, createPlan as createPlanService, updatePlan as updatePlanService, deletePlan as deletePlanService } from '../services/firebase/pricingService';
-import { subscribeUsers, createUser as createUserService, updateUser as updateUserService } from '../services/firebase/userService';
+import { subscribeUsers, createUser as createUserService, updateUser as updateUserService, findOrCreateStudent as findOrCreateStudentService } from '../services/firebase/userService';
 import { subscribeAmenities } from '../services/firebase/amenityService';
 import { subscribeBranchInfo } from '../services/firebase/branchService';
-import { subscribeZones, createZoneInFirestore, updateZoneInFirestore, deleteZoneInFirestore, getLocalZones } from '../services/firebase/zoneService';
-import { ACCESS_PLANS, MOCK_SEATS } from '../services/mock/mockData';
+import { subscribeZones, createZoneInFirestore, updateZoneInFirestore, deleteZoneInFirestore, resetAndSeedZonesInFirestore, INITIAL_ZONES } from '../services/firebase/zoneService';
+import { subscribeLockers, assignLockerInFirestore, releaseLockerInFirestore, updateLockerStatusInFirestore, createLockerInFirestore } from '../services/firebase/lockerService';
+import { ACCESS_PLANS, MOCK_SEATS, MOCK_LOCKERS } from '../services/mock/mockData';
 
 const BookingContext = createContext();
 
 export const BookingProvider = ({ children }) => {
   const [seats, setSeats] = useState(MOCK_SEATS);
+  const [lockers, setLockers] = useState(MOCK_LOCKERS);
   const [bookings, setBookings] = useState([]);
   const [users, setUsers] = useState([]);
   const [plans, setPlans] = useState(ACCESS_PLANS);
@@ -29,6 +31,10 @@ export const BookingProvider = ({ children }) => {
     const unsubSeats = subscribeSeatAvailability((updatedSeats) => {
       setSeats(updatedSeats);
       setLoading(false);
+    });
+
+    const unsubLockers = subscribeLockers((updatedLockers) => {
+      setLockers(updatedLockers);
     });
 
     const unsubBookings = subscribeBookings((updatedBookings) => {
@@ -59,6 +65,7 @@ export const BookingProvider = ({ children }) => {
 
     return () => {
       unsubSeats();
+      unsubLockers();
       unsubBookings();
       unsubUsers();
       unsubPlans();
@@ -74,6 +81,44 @@ export const BookingProvider = ({ children }) => {
 
   const selectPlan = (plan) => {
     setSelectedPlan(plan);
+  };
+
+  // Locker Management
+  const assignLocker = async (lockerId, assignmentData) => {
+    const res = await assignLockerInFirestore(lockerId, assignmentData);
+    setLockers(prev => prev.map(l => l.id === lockerId ? { ...l, status: 'ASSIGNED', ...assignmentData } : l));
+    return res;
+  };
+
+  const releaseLocker = async (lockerId) => {
+    const res = await releaseLockerInFirestore(lockerId);
+    setLockers(prev => prev.map(l => l.id === lockerId ? {
+      ...l,
+      status: 'AVAILABLE',
+      assignedToUserId: null,
+      assignedToUserName: null,
+      assignedToUserPhone: null,
+      assignedToUserEmail: null,
+      assignedSeatNumber: null,
+      passType: null,
+      pinCode: null,
+      notes: ''
+    } : l));
+    return res;
+  };
+
+  const updateLockerStatus = async (lockerId, newStatus, details = {}) => {
+    const res = await updateLockerStatusInFirestore(lockerId, newStatus, details);
+    setLockers(prev => prev.map(l => l.id === lockerId ? { ...l, status: newStatus, ...details } : l));
+    return res;
+  };
+
+  const createLocker = async (lockerData) => {
+    const newLocker = await createLockerInFirestore(lockerData);
+    if (newLocker) {
+      setLockers(prev => [...prev, newLocker]);
+    }
+    return newLocker;
   };
 
   // Zone Management
@@ -100,6 +145,14 @@ export const BookingProvider = ({ children }) => {
   const deleteZone = async (zoneId) => {
     const res = await deleteZoneInFirestore(zoneId);
     setZones(prev => prev.filter(z => z.id !== zoneId));
+    return res;
+  };
+
+  const resetAndSeedZones = async () => {
+    const res = await resetAndSeedZonesInFirestore();
+    if (res && res.success) {
+      setZones(INITIAL_ZONES);
+    }
     return res;
   };
 
@@ -183,6 +236,7 @@ export const BookingProvider = ({ children }) => {
     <BookingContext.Provider
       value={{
         seats,
+        lockers,
         bookings,
         users,
         plans,
@@ -200,9 +254,14 @@ export const BookingProvider = ({ children }) => {
         createSeat,
         updateSeatDetails,
         deleteSeat,
+        assignLocker,
+        releaseLocker,
+        updateLockerStatus,
+        createLocker,
         createZone,
         updateZoneDetails,
         deleteZone,
+        resetAndSeedZones,
         createBooking,
         changeBookingStatus,
         changePaymentStatus,
@@ -210,6 +269,7 @@ export const BookingProvider = ({ children }) => {
         confirmBooking,
         createUser,
         updateUser,
+        findOrCreateStudent: findOrCreateStudentService,
         createPlan,
         updatePlan,
         deletePlan
@@ -221,5 +281,3 @@ export const BookingProvider = ({ children }) => {
 };
 
 export const useBooking = () => useContext(BookingContext);
-
-

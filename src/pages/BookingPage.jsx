@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { Header } from '../components/layout/Header';
 import { Footer } from '../components/layout/Footer';
 import { useBooking } from '../context/BookingContext';
 import { ACCESS_PLANS } from '../services/mock/mockData';
-import { CheckCircle2, User, Mail, Phone, Calendar, ArrowRight, ArrowLeft, ShieldCheck, Ticket, Sparkles, Lock } from 'lucide-react';
+import { CheckCircle2, User, Mail, Phone, Calendar, ArrowRight, ArrowLeft, ShieldCheck, Ticket, Sparkles, Lock, Clock, Camera } from 'lucide-react';
 
 export const BookingPage = () => {
   const [searchParams] = useSearchParams();
@@ -19,6 +19,9 @@ export const BookingPage = () => {
   const [selectedPassType, setSelectedPassType] = useState(urlPlanId ? urlPlanId.toUpperCase() : 'DAILY');
   const [includeLocker, setIncludeLocker] = useState(false);
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [arrivalTime, setArrivalTime] = useState('07:00 AM');
+  const [customArrivalTime, setCustomArrivalTime] = useState('');
+  const [isCustomTime, setIsCustomTime] = useState(false);
   const [formData, setFormData] = useState({
     userName: '',
     userEmail: '',
@@ -26,6 +29,21 @@ export const BookingPage = () => {
   });
   const [confirmedBooking, setConfirmedBooking] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Generate 15-minute time slots from 06:00 AM to 10:00 PM
+  const timeSlots = useMemo(() => {
+    const slots = [];
+    for (let hour = 6; hour <= 22; hour++) {
+      for (let min = 0; min < 60; min += 15) {
+        if (hour === 22 && min > 0) break; // Stop at 10:00 PM
+        const period = hour >= 12 ? 'PM' : 'AM';
+        const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+        const displayMin = min < 10 ? `0${min}` : min;
+        slots.push(`${displayHour < 10 ? '0' + displayHour : displayHour}:${displayMin} ${period}`);
+      }
+    }
+    return slots;
+  }, []);
 
   useEffect(() => {
     if (urlSeatId && !selectedSeatId) {
@@ -52,6 +70,8 @@ export const BookingPage = () => {
     return calculateBasePrice() + getLockerFee();
   };
 
+  const finalArrivalTime = isCustomTime ? (customArrivalTime || '07:00 AM') : arrivalTime;
+
   const handleNextStep = (e) => {
     e.preventDefault();
     if (step === 1 && (!selectedSeatObj || selectedSeatObj.status !== 'AVAILABLE')) {
@@ -67,11 +87,14 @@ export const BookingPage = () => {
       const booking = await createBooking({
         seatId: selectedSeatObj.id,
         seatNumber: selectedSeatObj.seatNumber,
+        zone: selectedSeatObj.zone || '',
         passType: selectedPassType,
         hasLocker: includeLocker && selectedPassType !== 'DAILY',
         lockerFee: getLockerFee(),
         startDate: startDate,
         endDate: startDate,
+        arrivalTime: finalArrivalTime,
+        bookingTime: finalArrivalTime,
         userName: formData.userName,
         userEmail: formData.userEmail,
         userPhone: formData.userPhone,
@@ -350,12 +373,12 @@ export const BookingPage = () => {
             </div>
           )}
 
-          {/* Step 2: Contact Info */}
+          {/* Step 2: Contact Info & Arrival Time */}
           {step === 2 && (
             <form onSubmit={handleNextStep} className="card" style={{ padding: '2.5rem' }}>
-              <h2 style={{ marginBottom: '0.5rem' }}>Scholar Details</h2>
+              <h2 style={{ marginBottom: '0.5rem' }}>Scholar Details & Arrival Time</h2>
               <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>
-                Enter your contact information for reservation confirmation and keycard access.
+                Enter your contact information and expected arrival time for your check-in ticket.
               </p>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '2.5rem' }}>
@@ -405,33 +428,33 @@ export const BookingPage = () => {
                   </div>
                 </div>
 
+                <div>
+                  <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--primary)' }}>
+                    Phone Number (Nepal) *
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <Phone size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input
+                      type="tel"
+                      required
+                      placeholder="+977 9841234567"
+                      value={formData.userPhone}
+                      onChange={(e) => setFormData({ ...formData, userPhone: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '0.85rem 1rem 0.85rem 2.75rem',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--border-subtle)',
+                        fontSize: '1rem'
+                      }}
+                    />
+                  </div>
+                </div>
+
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--primary)' }}>
-                      Phone Number (Nepal) *
-                    </label>
-                    <div style={{ position: 'relative' }}>
-                      <Phone size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                      <input
-                        type="tel"
-                        required
-                        placeholder="+977 9841234567"
-                        value={formData.userPhone}
-                        onChange={(e) => setFormData({ ...formData, userPhone: e.target.value })}
-                        style={{
-                          width: '100%',
-                          padding: '0.85rem 1rem 0.85rem 2.75rem',
-                          borderRadius: 'var(--radius-md)',
-                          border: '1px solid var(--border-subtle)',
-                          fontSize: '1rem'
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--primary)' }}>
-                      Reservation Start Date *
+                      Reservation Date *
                     </label>
                     <div style={{ position: 'relative' }}>
                       <Calendar size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
@@ -449,6 +472,70 @@ export const BookingPage = () => {
                           fontSize: '1rem'
                         }}
                       />
+                    </div>
+                  </div>
+
+                  {/* Arrival Time Selector (15-min intervals or custom type) */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <label style={{ fontWeight: 600, color: 'var(--primary)', fontSize: '0.95rem' }}>
+                        Expected Arrival Time *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomTime(!isCustomTime)}
+                        style={{
+                          background: 'none', border: 'none', color: 'var(--accent-hover)',
+                          fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline'
+                        }}
+                      >
+                        {isCustomTime ? 'Select from list' : 'Type custom time'}
+                      </button>
+                    </div>
+
+                    <div style={{ position: 'relative' }}>
+                      <Clock size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                      {isCustomTime ? (
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. 06:45 AM or 02:30 PM"
+                          value={customArrivalTime}
+                          onChange={(e) => setCustomArrivalTime(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '0.85rem 1rem 0.85rem 2.75rem',
+                            borderRadius: 'var(--radius-md)',
+                            border: '1px solid var(--border-subtle)',
+                            fontSize: '1rem',
+                            fontWeight: 600
+                          }}
+                        />
+                      ) : (
+                        <select
+                          value={arrivalTime}
+                          onChange={(e) => setArrivalTime(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '0.85rem 1rem 0.85rem 2.75rem',
+                            borderRadius: 'var(--radius-md)',
+                            border: '1px solid var(--border-subtle)',
+                            fontSize: '1rem',
+                            fontWeight: 600,
+                            backgroundColor: '#FFFFFF',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {timeSlots.map((slot) => (
+                            <option key={slot} value={slot}>
+                              {slot} {slot === '06:00 AM' ? '(Opening)' : slot === '10:00 PM' ? '(Closing)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+                      Operating hours: 06:00 AM – 10:00 PM (15 min increments)
                     </div>
                   </div>
                 </div>
@@ -498,6 +585,12 @@ export const BookingPage = () => {
                     </div>
                   </div>
                   <div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Expected Arrival</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--primary)' }}>
+                      ⏰ {finalArrivalTime}
+                    </div>
+                  </div>
+                  <div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Scholar Name</div>
                     <div style={{ fontSize: '1rem', fontWeight: 600 }}>{formData.userName}</div>
                   </div>
@@ -544,7 +637,7 @@ export const BookingPage = () => {
                   disabled={submitting}
                   style={{ padding: '0.875rem 2.25rem' }}
                 >
-                  {submitting ? 'Submitting to Firestore...' : 'Submit Reservation Request'}
+                  {submitting ? 'Submitting...' : 'Submit Reservation Request'}
                 </button>
               </div>
             </div>
@@ -580,7 +673,7 @@ export const BookingPage = () => {
                 borderRadius: 'var(--radius-full)',
                 fontSize: '0.8rem',
                 fontWeight: 700,
-                marginBottom: '2rem',
+                marginBottom: '1.75rem',
                 border: '1px solid #FCD34D'
               }}>
                 ⏳ PENDING ADMIN CONFIRMATION
@@ -592,8 +685,8 @@ export const BookingPage = () => {
                 color: '#FFFFFF',
                 borderRadius: 'var(--radius-xl)',
                 padding: '2rem',
-                maxWidth: '480px',
-                margin: '0 auto 2.5rem auto',
+                maxWidth: '500px',
+                margin: '0 auto 2rem auto',
                 boxShadow: 'var(--shadow-hover)',
                 position: 'relative',
                 textAlign: 'left'
@@ -601,7 +694,7 @@ export const BookingPage = () => {
                 <div style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.15)', paddingBottom: '1rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>The Quiet Desk</div>
-                    <div style={{ fontFamily: 'var(--font-headline)', fontWeight: 700, fontSize: '1.25rem' }}>Kathmandu Pass</div>
+                    <div style={{ fontFamily: 'var(--font-headline)', fontWeight: 700, fontSize: '1.25rem' }}>Kathmandu Pass Voucher</div>
                   </div>
                   <span style={{
                     padding: '0.3rem 0.75rem',
@@ -610,7 +703,7 @@ export const BookingPage = () => {
                     borderRadius: 'var(--radius-full)',
                     fontSize: '0.7rem',
                     fontWeight: 700
-                  }}>AWAITING CONFIRMATION</span>
+                  }}>CONFIRMATION PENDING</span>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
@@ -635,6 +728,12 @@ export const BookingPage = () => {
                     <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>{confirmedBooking.passType}</div>
                   </div>
                   <div>
+                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>Arrival Time</div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--accent)' }}>
+                      ⏰ {confirmedBooking.arrivalTime || confirmedBooking.bookingTime || finalArrivalTime}
+                    </div>
+                  </div>
+                  <div>
                     <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>Locker Access</div>
                     <div style={{ fontSize: '0.95rem', fontWeight: 700, color: confirmedBooking.hasLocker ? 'var(--accent)' : 'rgba(255,255,255,0.8)' }}>
                       {confirmedBooking.hasLocker ? `🔒 Included (+NPR ${confirmedBooking.lockerFee})` : 'Not Included'}
@@ -647,16 +746,52 @@ export const BookingPage = () => {
                 </div>
 
                 <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', textAlign: 'center', borderTop: '1px dashed rgba(255,255,255,0.2)', paddingTop: '1rem' }}>
-                  Lazimpat, Kathmandu • Desk reserved — admin confirmation pending
+                  Lazimpat, Kathmandu • Present this ticket reference at reception
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              {/* 📸 Screenshot Instruction Note Banner (replacing non-working print button) */}
+              <div style={{
+                backgroundColor: '#EFF6FF',
+                border: '2px dashed #93C5FD',
+                borderRadius: '12px',
+                padding: '1.25rem 1.5rem',
+                maxWidth: '500px',
+                margin: '0 auto 2rem auto',
+                textAlign: 'center',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem'
+              }}>
+                <div style={{
+                  width: '42px', height: '42px', borderRadius: '10px',
+                  backgroundColor: '#DBEAFE', color: '#1D4ED8',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                }}>
+                  <Camera size={22} />
+                </div>
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#1E40AF' }}>
+                    📸 Please take a screenshot of this ticket!
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: '#3B82F6', marginTop: '0.2rem', lineHeight: 1.4 }}>
+                    Save this reference code on your phone to show at the reception desk upon check-in.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                 <Link to="/" className="btn btn-outline">
                   Return to Home
                 </Link>
-                <button onClick={() => window.print()} className="btn btn-primary">
-                  Print / Save Reference
+                <button
+                  onClick={() => {
+                    setStep(1);
+                    setConfirmedBooking(null);
+                  }}
+                  className="btn btn-primary"
+                >
+                  Book Another Seat
                 </button>
               </div>
             </div>

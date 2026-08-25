@@ -101,28 +101,40 @@ export const saveLocalUsers = (users) => {
   localStorage.setItem(LOCAL_STORAGE_USERS_KEY, JSON.stringify(users));
 };
 
+// Normalize a raw user doc so name & fullName always agree
+const normalizeUser = (raw) => {
+  const base = { ...raw };
+  // Ensure both fields exist
+  base.fullName = base.fullName || base.name || '';
+  base.name = base.fullName;
+  // Ensure status field exists (walk-in sets status, admin register sets membershipStatus)
+  base.status = base.status || base.membershipStatus || 'ACTIVE';
+  base.membershipStatus = base.status;
+  return base;
+};
+
 export const subscribeUsers = (onUsersUpdate) => {
   let unsub = () => {};
   try {
     const usersRef = collection(db, 'users');
     unsub = onSnapshot(usersRef, (snapshot) => {
       if (!snapshot.empty) {
-        const firestoreUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const firestoreUsers = snapshot.docs.map(d => normalizeUser({ id: d.id, ...d.data() }));
         saveLocalUsers(firestoreUsers);
         onUsersUpdate(firestoreUsers);
       } else {
-        onUsersUpdate(getLocalUsers());
+        onUsersUpdate(getLocalUsers().map(normalizeUser));
       }
     }, (error) => {
       console.warn('Firestore users subscription fallback:', error.message);
-      onUsersUpdate(getLocalUsers());
+      onUsersUpdate(getLocalUsers().map(normalizeUser));
     });
   } catch (e) {
     console.warn('Firestore offline fallback for users:', e);
-    onUsersUpdate(getLocalUsers());
+    onUsersUpdate(getLocalUsers().map(normalizeUser));
   }
 
-  const handleLocalChange = () => onUsersUpdate(getLocalUsers());
+  const handleLocalChange = () => onUsersUpdate(getLocalUsers().map(normalizeUser));
   window.addEventListener('storage', handleLocalChange);
 
   return () => {
@@ -133,13 +145,18 @@ export const subscribeUsers = (onUsersUpdate) => {
 
 export const createUser = async (userData) => {
   const userId = 'usr_' + Date.now();
-  const newUser = {
+  const displayName = userData.fullName || userData.name || '';
+  const newUser = normalizeUser({
     id: userId,
     createdAt: new Date().toISOString(),
+    joinedDate: new Date().toISOString(),
     status: 'ACTIVE',
+    membershipStatus: 'ACTIVE',
     passType: 'DAILY',
-    ...userData
-  };
+    ...userData,
+    fullName: displayName,
+    name: displayName,
+  });
 
   const currentLocal = getLocalUsers();
   const updatedLocal = [newUser, ...currentLocal];
@@ -156,8 +173,14 @@ export const createUser = async (userData) => {
 };
 
 export const updateUser = async (userId, updatedFields) => {
+  // Keep name & fullName in sync if either is updated
+  if (updatedFields.fullName && !updatedFields.name) updatedFields.name = updatedFields.fullName;
+  if (updatedFields.name && !updatedFields.fullName) updatedFields.fullName = updatedFields.name;
+  if (updatedFields.status && !updatedFields.membershipStatus) updatedFields.membershipStatus = updatedFields.status;
+  if (updatedFields.membershipStatus && !updatedFields.status) updatedFields.status = updatedFields.membershipStatus;
+
   const currentLocal = getLocalUsers();
-  const updatedLocal = currentLocal.map(u => u.id === userId ? { ...u, ...updatedFields } : u);
+  const updatedLocal = currentLocal.map(u => u.id === userId ? normalizeUser({ ...u, ...updatedFields }) : u);
   saveLocalUsers(updatedLocal);
 
   try {
@@ -169,3 +192,33 @@ export const updateUser = async (userId, updatedFields) => {
     return false;
   }
 };
+
+export const findOrCreateStudent = async (studentData) => {
+  const users = getLocalUsers();
+  const phone = (studentData.phone || '').trim();
+  const email = (studentData.email || '').trim().toLowerCase();
+
+  let existing = users.find(u => 
+    (phone && u.phone && u.phone.trim() === phone) ||
+    (email && u.email && u.email.trim().toLowerCase() === email)
+  );
+
+  if (existing) {
+    const updated = {
+      ...studentData,
+      id: existing.id,
+      userCode: existing.userCode || `QD-STU-${Math.floor(1000 + Math.random() * 9000)}`,
+      updatedAt: new Date().toISOString()
+    };
+    await updateUser(existing.id, updated);
+    return { user: { ...existing, ...updated }, isNew: false };
+  } else {
+    const userCode = `QD-STU-${Math.floor(1000 + Math.random() * 9000)}`;
+    const created = await createUser({
+      ...studentData,
+      userCode
+    });
+    return { user: created, isNew: true };
+  }
+};
+

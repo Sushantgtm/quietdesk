@@ -100,10 +100,10 @@ export const createSeatInFirestore = async (seatData) => {
   const newId = seatData.id || `seat_${Date.now()}`;
   const newSeat = {
     id: newId,
-    seatNumber: seatData.seatNumber || 'A-00',
-    zone: seatData.zone || 'Quiet Zone Alpha',
+    seatNumber: seatData.seatNumber || 'A1',
+    zone: seatData.zone || 'Left Quiet Row (Zone A)',
     type: seatData.type || 'Single Desk',
-    pricePerDay: Number(seatData.pricePerDay) || 350,
+    pricePerDay: Number(seatData.pricePerDay) || 500,
     status: seatData.status || 'AVAILABLE',
     features: Array.isArray(seatData.features) ? seatData.features : (seatData.features ? seatData.features.split(',').map(s => s.trim()) : ['Power Outlet', 'Reading Light']),
     createdAt: new Date().toISOString()

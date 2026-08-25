@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Header } from '../components/layout/Header';
 import { Footer } from '../components/layout/Footer';
-import { Shield, Lock, Mail, Key, CheckCircle2 } from 'lucide-react';
+import { Shield, Lock, Mail } from 'lucide-react';
 
 export const AdminLoginPage = () => {
-  const [email, setEmail] = useState('admin@quietdesk.np');
-  const [password, setPassword] = useState('lazimpat2026');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const { login, loading } = useAuth();
   const navigate = useNavigate();
@@ -21,12 +21,6 @@ export const AdminLoginPage = () => {
     } catch (err) {
       setError(err.message || 'Invalid admin credentials');
     }
-  };
-
-  const fillCredentials = (userEmail, userPass) => {
-    setEmail(userEmail);
-    setPassword(userPass);
-    setError('');
   };
 
   return (
@@ -81,7 +75,7 @@ export const AdminLoginPage = () => {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="admin@quietdesk.np"
+                    placeholder="Enter admin email address"
                     style={{
                       width: '100%',
                       padding: '0.8rem 1rem 0.8rem 2.75rem',
@@ -104,7 +98,7 @@ export const AdminLoginPage = () => {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
+                    placeholder="Enter password"
                     style={{
                       width: '100%',
                       padding: '0.8rem 1rem 0.8rem 2.75rem',
@@ -124,57 +118,6 @@ export const AdminLoginPage = () => {
               >
                 {loading ? 'Authenticating...' : 'Sign In to Manager Portal'}
               </button>
-
-              {/* Quick Fill Demo Credentials Box */}
-              <div style={{
-                marginTop: '1.25rem',
-                padding: '1rem',
-                backgroundColor: 'var(--accent-light)',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--border-accent)',
-                fontSize: '0.85rem',
-                color: 'var(--primary)'
-              }}>
-                <div style={{ fontWeight: 700, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent-hover)' }}>
-                  <Key size={14} /> Quick Click Admin Credentials:
-                </div>
-                
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <button
-                    type="button"
-                    onClick={() => fillCredentials('admin@quietdesk.np', 'lazimpat2026')}
-                    style={{
-                      padding: '0.4rem 0.6rem',
-                      fontSize: '0.75rem',
-                      borderRadius: 'var(--radius-sm)',
-                      backgroundColor: 'var(--bg-surface)',
-                      border: '1px solid var(--border-subtle)',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      color: 'var(--primary)'
-                    }}
-                  >
-                    <strong>Primary Admin:</strong> admin@quietdesk.np | lazimpat2026
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => fillCredentials('admin@quietdesk.com', 'quietdesk2026')}
-                    style={{
-                      padding: '0.4rem 0.6rem',
-                      fontSize: '0.75rem',
-                      borderRadius: 'var(--radius-sm)',
-                      backgroundColor: 'var(--bg-surface)',
-                      border: '1px solid var(--border-subtle)',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      color: 'var(--primary)'
-                    }}
-                  >
-                    <strong>Secondary Admin:</strong> admin@quietdesk.com | quietdesk2026
-                  </button>
-                </div>
-              </div>
             </form>
           </div>
         </div>

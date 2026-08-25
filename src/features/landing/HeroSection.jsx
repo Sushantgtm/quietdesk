@@ -81,58 +81,66 @@ export const HeroSection = () => {
           }}>
             <div style={{
               width: '100%',
-              maxWidth: '480px',
+              maxWidth: '460px',
               backgroundColor: 'var(--bg-surface)',
               borderRadius: 'var(--radius-xl)',
-              padding: '2.5rem',
+              padding: '2rem',
               boxShadow: 'var(--shadow-hover)',
-              border: '1px solid var(--border-accent)',
+              border: '1.5px solid var(--border-accent)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
               textAlign: 'center'
             }}>
               {/* Minimal Line Art Artwork */}
-              <svg viewBox="0 0 400 300" width="100%" height="auto" fill="none" stroke="#C9A574" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                {/* Desk Surface */}
-                <path d="M 40 220 L 360 220" strokeWidth="4" stroke="#151B2E" />
-                <path d="M 60 220 L 60 270" strokeWidth="3" stroke="#151B2E" />
-                <path d="M 340 220 L 340 270" strokeWidth="3" stroke="#151B2E" />
-                
-                {/* Open Book */}
-                <path d="M 120 220 C 140 200, 180 200, 200 220 C 220 200, 260 200, 280 220" />
-                <line x1="200" y1="205" x2="200" y2="220" strokeWidth="1.5" />
-                <line x1="140" y1="210" x2="185" y2="210" strokeWidth="1.5" opacity="0.6" />
-                <line x1="140" y1="215" x2="180" y2="215" strokeWidth="1.5" opacity="0.6" />
-                <line x1="215" y1="210" x2="260" y2="210" strokeWidth="1.5" opacity="0.6" />
-                <line x1="215" y1="215" x2="255" y2="215" strokeWidth="1.5" opacity="0.6" />
-                
-                {/* Study Lamp */}
-                <path d="M 90 220 L 90 140 L 140 100" strokeWidth="3" stroke="#151B2E" />
-                <path d="M 130 90 L 165 110 L 145 125 Z" fill="#C9A574" fillOpacity="0.15" />
-                
-                {/* Coffee Cup */}
-                <rect x="300" y="195" width="25" height="25" rx="3" strokeWidth="2" />
-                <path d="M 325 200 Q 333 207.5 325 215" strokeWidth="2" />
-                
-                {/* Plant Succulent */}
-                <path d="M 350 220 L 345 200 L 365 200 Z" />
-                <path d="M 355 200 Q 350 185 340 190" />
-                <path d="M 355 200 Q 360 180 370 185" />
-                
-                {/* Sound Waves floating (Silence concept) */}
-                <path d="M 180 80 Q 200 65 220 80" strokeDasharray="3 3" opacity="0.7" />
-                <path d="M 170 65 Q 200 45 230 65" strokeDasharray="3 3" opacity="0.4" />
-              </svg>
-
-              <div style={{
-                marginTop: '1.5rem',
-                fontFamily: 'var(--font-headline)',
-                fontWeight: 600,
-                color: 'var(--primary)',
-                fontSize: '1.1rem'
-              }}>
-                Crafted for Deep Focus
+              <div style={{ width: '100%', maxWidth: '360px', margin: '0 auto' }}>
+                <svg viewBox="0 0 400 300" width="100%" height="auto" fill="none" stroke="#C9A574" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  {/* Desk Surface */}
+                  <path d="M 40 220 L 360 220" strokeWidth="4" stroke="#151B2E" />
+                  <path d="M 60 220 L 60 270" strokeWidth="3" stroke="#151B2E" />
+                  <path d="M 340 220 L 340 270" strokeWidth="3" stroke="#151B2E" />
+                  
+                  {/* Open Book */}
+                  <path d="M 120 220 C 140 200, 180 200, 200 220 C 220 200, 260 200, 280 220" />
+                  <line x1="200" y1="205" x2="200" y2="220" strokeWidth="1.5" />
+                  <line x1="140" y1="210" x2="185" y2="210" strokeWidth="1.5" opacity="0.6" />
+                  <line x1="140" y1="215" x2="180" y2="215" strokeWidth="1.5" opacity="0.6" />
+                  <line x1="215" y1="210" x2="260" y2="210" strokeWidth="1.5" opacity="0.6" />
+                  <line x1="215" y1="215" x2="255" y2="215" strokeWidth="1.5" opacity="0.6" />
+                  
+                  {/* Study Lamp */}
+                  <path d="M 90 220 L 90 140 L 140 100" strokeWidth="3" stroke="#151B2E" />
+                  <path d="M 130 90 L 165 110 L 145 125 Z" fill="#C9A574" fillOpacity="0.15" />
+                  
+                  {/* Coffee Cup */}
+                  <rect x="300" y="195" width="25" height="25" rx="3" strokeWidth="2" />
+                  <path d="M 325 200 Q 333 207.5 325 215" strokeWidth="2" />
+                  
+                  {/* Plant Succulent */}
+                  <path d="M 350 220 L 345 200 L 365 200 Z" />
+                  <path d="M 355 200 Q 350 185 340 190" />
+                  <path d="M 355 200 Q 360 180 370 185" />
+                  
+                  {/* Sound Waves floating (Silence concept) */}
+                  <path d="M 180 80 Q 200 65 220 80" strokeDasharray="3 3" opacity="0.7" />
+                  <path d="M 170 65 Q 200 45 230 65" strokeDasharray="3 3" opacity="0.4" />
+                </svg>
               </div>
-              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                Equipped with acoustic isolation & high-speed Wi-Fi
+
+              <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.35rem' }}>
+                <div style={{
+                  fontFamily: 'var(--font-headline)',
+                  fontWeight: 700,
+                  color: 'var(--primary)',
+                  fontSize: '1.15rem',
+                  letterSpacing: '-0.01em'
+                }}>
+                  Crafted for Deep Focus
+                </div>
+                <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', maxWidth: '320px', lineHeight: 1.5 }}>
+                  Equipped with acoustic isolation, ergonomic seating & high-speed Wi-Fi
+                </div>
               </div>
             </div>
           </div>

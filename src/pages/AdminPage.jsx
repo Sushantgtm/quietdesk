@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBooking } from '../context/BookingContext';
@@ -7,19 +7,28 @@ import {
   LayoutDashboard, Grid, Calendar, DollarSign, Settings, ChevronRight, 
   UserCheck, AlertCircle, Clock, TrendingUp, CreditCard, ChevronDown, Check, X,
   Users, UserPlus, Package, Edit, Edit3, Plus, Eye, Trash2, Lock, Tag, XCircle, Phone, Mail, User,
-  PlusCircle, Sparkles, Layers, Sliders
+  PlusCircle, Sparkles, Layers, Sliders, MapPin, FileText, CheckCircle, Printer, Copy, AlertTriangle,
+  Compass, DoorOpen, Bookmark
 } from 'lucide-react';
 import { seedAllCollectionsToFirestore } from '../services/firebase/seedService';
+import { WalkinStudentModal } from '../components/admin/WalkinStudentModal';
+import { RegistrationReceiptModal } from '../components/admin/RegistrationReceiptModal';
+import { StudyRoomFloorPlan } from '../components/admin/StudyRoomFloorPlan';
+import { CabinStudentSelectModal } from '../components/admin/CabinStudentSelectModal';
+import { LockerManageModal } from '../components/admin/LockerManageModal';
+import { StudentProfileModal } from '../components/admin/StudentProfileModal';
+import { ReservationConfirmModal } from '../components/admin/ReservationConfirmModal';
 
 export const AdminPage = () => {
   const { isAuthenticated, logout, admin } = useAuth();
   const { 
-    seats, bookings, users, plans, zones,
+    seats, lockers, bookings, users, plans, zones,
     changeSeatStatus, changeBookingStatus, changePaymentStatus, 
     loadingBookings, loadingUsers, confirmBooking,
     createUser, updateUser, createPlan, updatePlan, deletePlan, 
     createBooking, updateBookingDetails, createSeat, updateSeatDetails, deleteSeat,
-    createZone, updateZoneDetails, deleteZone
+    createZone, updateZoneDetails, deleteZone, resetAndSeedZones, findOrCreateStudent,
+    assignLocker, releaseLocker, updateLockerStatus, createLocker
   } = useBooking();
   const navigate = useNavigate();
 
@@ -34,13 +43,27 @@ export const AdminPage = () => {
   const [seatStatusFilter, setSeatStatusFilter] = useState('ALL');
   const [seatViewMode, setSeatViewMode] = useState('GRID');
   const [userStatusFilter, setUserStatusFilter] = useState('ALL');
+  const [userDueFilter, setUserDueFilter] = useState('ALL'); // ALL | HAS_DUE | NO_DUE
+  const [financeStatusFilter, setFinanceStatusFilter] = useState('ALL');
+  const [bookingStatusFilter, setBookingStatusFilter] = useState('ALL');
 
   // Modal States
   const [selectedUserForProfile, setSelectedUserForProfile] = useState(null);
   const [showRegisterUserModal, setShowRegisterUserModal] = useState(false);
+  const [showEditUserModal, setShowEditUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [editUserForm, setEditUserForm] = useState({});
+  const [showWalkinStudentModal, setShowWalkinStudentModal] = useState(false);
+  const [preselectedSeatForWalkin, setPreselectedSeatForWalkin] = useState(null);
+  const [showRegistrationReceiptModal, setShowRegistrationReceiptModal] = useState(false);
+  const [registrationReceiptData, setRegistrationReceiptData] = useState(null);
+
   const [registerUserForm, setRegisterUserForm] = useState({
     fullName: '', email: '', phone: '', passType: 'DAILY', emergencyContact: '', notes: ''
   });
+
+  const [showReservationConfirmModal, setShowReservationConfirmModal] = useState(false);
+  const [selectedBookingForConfirmation, setSelectedBookingForConfirmation] = useState(null);
 
   const [showReservationModal, setShowReservationModal] = useState(false);
   const [reservationForm, setReservationForm] = useState({
@@ -69,14 +92,18 @@ export const AdminPage = () => {
   // Dashboard: Session Expiry Popup Modal
   const [showSessionExpiryPopup, setShowSessionExpiryPopup] = useState(false);
 
-  // Manage Desk & Zone Navigation
-  const [desksSubTab, setDesksSubTab] = useState('STATIONS'); // 'STATIONS' | 'ZONES' | 'CREATE_STATION'
+  // Manage Desk & Zone Navigation - LAYOUT is 1st default, STATIONS is 2nd, ZONES is 3rd, CREATE_STATION is 4th
+  const [desksSubTab, setDesksSubTab] = useState('LAYOUT'); // 'LAYOUT' | 'STATIONS' | 'ZONES' | 'CREATE_STATION'
+  const [selectedSeatForCabinModal, setSelectedSeatForCabinModal] = useState(null);
+  const [showCabinStudentModal, setShowCabinStudentModal] = useState(false);
+  const [selectedLockerForModal, setSelectedLockerForModal] = useState(null);
+  const [showLockerModal, setShowLockerModal] = useState(false);
 
   // Manage Desk / Station Modal State
   const [showSeatModal, setShowSeatModal] = useState(false);
   const [editingSeat, setEditingSeat] = useState(null);
   const [seatForm, setSeatForm] = useState({
-    id: '', seatNumber: '', zone: 'Quiet Zone Alpha', type: 'Single Desk', pricePerDay: 350, status: 'AVAILABLE', features: 'Power Outlet, Ergonomic Chair'
+    id: '', seatNumber: '', zone: 'Left Quiet Row (Zone A)', type: 'Single Desk', pricePerDay: 500, status: 'AVAILABLE', features: 'Power Outlet, Ergonomic Chair'
   });
 
   // Study Zone Management State
@@ -156,32 +183,27 @@ export const AdminPage = () => {
   // Dedicated Add Station Page States
   const [addStationMode, setAddStationMode] = useState('SINGLE'); // 'SINGLE' | 'BULK'
   const [singleStationForm, setSingleStationForm] = useState({
-    seatNumber: 'A-09',
-    zone: 'Quiet Zone Alpha',
+    seatNumber: 'A14',
+    zone: 'Left Quiet Row (Zone A)',
     type: 'Single Desk',
     floor: 'Floor 1 (Ground)',
-    pricePerDay: 350,
+    pricePerDay: 500,
     status: 'AVAILABLE',
     features: ['Power Outlet', 'Ergonomic Chair', 'Reading Light'],
     hasLocker: false,
     notes: ''
   });
   const [bulkStationForm, setBulkStationForm] = useState({
-    prefix: 'POD-',
-    startNum: 1,
-    endNum: 6,
-    zone: 'Private Pods',
-    type: 'Private Pod',
-    floor: 'Floor 2 (Quiet Floor)',
-    pricePerDay: 500,
+    prefix: 'C',
+    startNum: 25,
+    endNum: 30,
+    zone: 'Center Focus Row (Zone C)',
+    type: 'Private Focus Pod',
+    floor: 'Floor 1 (Center)',
+    pricePerDay: 600,
     status: 'AVAILABLE',
-    features: ['Power Outlet', 'Ergonomic Chair', 'Soundproof Partition', 'Reading Light']
+    features: ['Power Outlet', 'Ergonomic Chair', 'Acoustic Soundproof Spine', 'Reading Light']
   });
-
-
-  // Filters for Finance & Bookings
-  const [financeStatusFilter, setFinanceStatusFilter] = useState('ALL');
-  const [bookingStatusFilter, setBookingStatusFilter] = useState('ALL');
 
   // Derived Data Helpers
   const userBookingsHistory = selectedUserForProfile
@@ -233,19 +255,88 @@ export const AdminPage = () => {
     return { basePrice, lockerFee, totalAmount };
   };
 
-  // Submit Handlers
-  const handleRegisterUserSubmit = async (e) => {
-    e.preventDefault();
+  // Walk-in Student Admission Handler
+  const handleWalkinStudentRegistration = async ({ studentData, bookingData, seatIdToOccupy }) => {
     try {
-      await createUser({
+      const { user: student } = await findOrCreateStudent(studentData);
+      const booking = await createBooking({
+        ...bookingData,
+        userId: student.id,
+        userCode: student.userCode,
+        status: 'CONFIRMED'
+      });
+
+      if (seatIdToOccupy) {
+        await changeSeatStatus(seatIdToOccupy, 'OCCUPIED');
+      }
+
+      if (studentData.hasLocker && studentData.lockerNumber) {
+        const matchingLocker = lockers.find(l => l.lockerNumber === studentData.lockerNumber || l.id === studentData.lockerNumber);
+        if (matchingLocker) {
+          await assignLocker(matchingLocker.id, {
+            userId: student.id,
+            userName: student.fullName || student.name,
+            userPhone: student.phone || '',
+            userEmail: student.email || '',
+            seatNumber: studentData.seatNumber || '',
+            passType: studentData.passType
+          });
+        }
+      }
+
+      setRegistrationReceiptData({
+        receiptNumber: `RCP-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+        date: new Date().toISOString(),
+        studentName: student.fullName || student.name,
+        studentCode: student.userCode,
+        studentPhone: student.phone,
+        studentAddress: student.address,
+        packageType: studentData.passType,
+        shift: studentData.shift,
+        seatNumber: studentData.seatNumber || 'Floating Desk',
+        hasLocker: studentData.hasLocker,
+        lockerNumber: studentData.lockerNumber,
+        basePrice: studentData.basePrice,
+        lockerFee: studentData.lockerFee,
+        totalAmount: studentData.totalAmount,
+        amountPaid: studentData.amountPaid,
+        pendingDue: studentData.pendingDue,
+        paymentMethod: studentData.paymentMethod
+      });
+
+      setShowWalkinStudentModal(false);
+      setShowRegistrationReceiptModal(true);
+    } catch (err) {
+      console.error('Walkin registration error:', err);
+      alert('Error registering walk-in student: ' + err.message);
+    }
+  };
+
+  const handleRegisterUserSubmit = async (e, proceedToBooking = false) => {
+    if (e && e.preventDefault) e.preventDefault();
+    try {
+      const newUser = await createUser({
         ...registerUserForm,
         userCode: `QD-USR-${Math.floor(1000 + Math.random() * 9000)}`,
         membershipStatus: 'ACTIVE',
         joinedDate: new Date().toISOString()
       });
       setShowRegisterUserModal(false);
+      
+      if (proceedToBooking) {
+        setReservationForm(prev => ({
+          ...prev,
+          userId: newUser.id,
+          userName: newUser.fullName || newUser.name,
+          userEmail: newUser.email,
+          userPhone: newUser.phone,
+          passType: newUser.passType || 'DAILY'
+        }));
+        setShowReservationModal(true);
+      } else {
+        alert('User profile successfully created and saved to database!');
+      }
       setRegisterUserForm({ fullName: '', email: '', phone: '', passType: 'DAILY', emergencyContact: '', notes: '' });
-      alert('User profile successfully created and saved to database!');
     } catch (err) {
       console.error('Error registering user:', err);
       alert('Failed to register user: ' + err.message);
@@ -460,9 +551,9 @@ export const AdminPage = () => {
       setSeatForm({
         id: seatToEdit.id,
         seatNumber: seatToEdit.seatNumber || '',
-        zone: seatToEdit.zone || 'Quiet Zone Alpha',
+        zone: seatToEdit.zone || 'Left Quiet Row (Zone A)',
         type: seatToEdit.type || 'Single Desk',
-        pricePerDay: seatToEdit.pricePerDay || 350,
+        pricePerDay: seatToEdit.pricePerDay || 500,
         status: seatToEdit.status || 'AVAILABLE',
         features: Array.isArray(seatToEdit.features) ? seatToEdit.features.join(', ') : (seatToEdit.features || 'Power Outlet, Ergonomic Chair')
       });
@@ -470,10 +561,10 @@ export const AdminPage = () => {
       setEditingSeat(null);
       setSeatForm({
         id: '',
-        seatNumber: `A-${Math.floor(10 + Math.random() * 90)}`,
-        zone: 'Quiet Zone Alpha',
+        seatNumber: `A14`,
+        zone: 'Left Quiet Row (Zone A)',
         type: 'Single Desk',
-        pricePerDay: 350,
+        pricePerDay: 500,
         status: 'AVAILABLE',
         features: 'Power Outlet, Ergonomic Chair, Reading Light'
       });
@@ -1007,45 +1098,49 @@ export const AdminPage = () => {
           </div>
 
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <button
-              onClick={() => setShowRegisterUserModal(true)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                backgroundColor: '#0F172A',
-                color: '#FFFFFF',
-                border: 'none',
-                padding: '0.5rem 0.9rem',
-                borderRadius: '8px',
-                fontSize: '0.85rem',
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
-            >
-              <UserPlus size={16} /> Register User
-            </button>
+            {activeTab !== 'DESKS' && (
+              <>
+                <button
+                  onClick={() => setShowRegisterUserModal(true)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    backgroundColor: '#0F172A',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    padding: '0.55rem 1rem',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <UserPlus size={16} /> + Register New User
+                </button>
 
-            <button
-              onClick={() => setShowReservationModal(true)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                backgroundColor: '#D97706',
-                color: '#FFFFFF',
-                border: 'none',
-                padding: '0.5rem 0.9rem',
-                borderRadius: '8px',
-                fontSize: '0.85rem',
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
-            >
-              <Plus size={16} /> Make Reservation
-            </button>
+                <button
+                  onClick={() => setShowReservationModal(true)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    backgroundColor: '#D97706',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    padding: '0.55rem 1rem',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Plus size={16} /> Make Reservation
+                </button>
+              </>
+            )}
 
-            <span style={{ fontSize: '0.8rem', backgroundColor: '#E2E8F0', color: '#334155', padding: '0.35rem 0.75rem', borderRadius: '20px', fontWeight: 600 }}>
+            <span style={{ fontSize: '0.8rem', backgroundColor: '#E2E8F0', color: '#334155', padding: '0.4rem 0.85rem', borderRadius: '20px', fontWeight: 700 }}>
               Occupancy: {occupancyRate}%
             </span>
           </div>
@@ -1499,7 +1594,27 @@ export const AdminPage = () => {
               </div>
 
               {/* Sub-Tab Navigation Pills */}
-              <div style={{ display: 'flex', backgroundColor: '#1E293B', padding: '0.3rem', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+              <div style={{ display: 'flex', backgroundColor: '#1E293B', padding: '0.3rem', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.1)', flexWrap: 'wrap', gap: '0.3rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setDesksSubTab('LAYOUT')}
+                  style={{
+                    padding: '0.55rem 1.1rem',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: desksSubTab === 'LAYOUT' ? '#D97706' : 'transparent',
+                    color: '#FFFFFF',
+                    fontWeight: 700,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Compass size={15} /> 🗺️ 1. Floor Layout Map
+                </button>
                 <button
                   type="button"
                   onClick={() => setDesksSubTab('STATIONS')}
@@ -1518,7 +1633,7 @@ export const AdminPage = () => {
                     transition: 'all 0.15s ease'
                   }}
                 >
-                  <Grid size={15} /> Stations Directory ({seats.length})
+                  <Grid size={15} /> 📋 2. Stations Directory ({seats.length})
                 </button>
                 <button
                   type="button"
@@ -1527,7 +1642,7 @@ export const AdminPage = () => {
                     padding: '0.55rem 1.1rem',
                     borderRadius: '8px',
                     border: 'none',
-                    backgroundColor: desksSubTab === 'ZONES' ? '#D97706' : 'transparent',
+                    backgroundColor: desksSubTab === 'ZONES' ? '#7C3AED' : 'transparent',
                     color: '#FFFFFF',
                     fontWeight: 700,
                     fontSize: '0.82rem',
@@ -1538,7 +1653,7 @@ export const AdminPage = () => {
                     transition: 'all 0.15s ease'
                   }}
                 >
-                  <Layers size={15} /> Study Zones ({zones.length})
+                  <Layers size={15} /> 🏷️ 3. Study Zones ({zones.length})
                 </button>
                 <button
                   type="button"
@@ -1558,7 +1673,7 @@ export const AdminPage = () => {
                     transition: 'all 0.15s ease'
                   }}
                 >
-                  <PlusCircle size={15} /> Add / Batch Desk
+                  <PlusCircle size={15} /> ⚡ 4. Add / Batch Desk
                 </button>
               </div>
             </div>
@@ -1586,6 +1701,27 @@ export const AdminPage = () => {
                 </div>
               </div>
             </div>
+
+            {/* ================= SUB-TAB 0: FLOOR LAYOUT MAP ================= */}
+            {desksSubTab === 'LAYOUT' && (
+              <StudyRoomFloorPlan
+                seats={seats}
+                bookings={bookings}
+                lockers={lockers}
+                onSelectCabin={(seat) => {
+                  setSelectedSeatForCabinModal(seat);
+                  setShowCabinStudentModal(true);
+                }}
+                onOpenWalkinForSeat={(seat) => {
+                  setPreselectedSeatForWalkin(seat);
+                  setShowWalkinStudentModal(true);
+                }}
+                onSelectLocker={(locker) => {
+                  setSelectedLockerForModal(locker);
+                  setShowLockerModal(true);
+                }}
+              />
+            )}
 
             {/* ================= SUB-TAB 1: STATIONS DIRECTORY ================= */}
             {desksSubTab === 'STATIONS' && (
@@ -1946,17 +2082,38 @@ export const AdminPage = () => {
                       Configure zone names, max capacity limits, and base daily pricing across Lazimpat branch.
                     </p>
                   </div>
-                  <button
-                    onClick={() => handleOpenZoneModal(null)}
-                    style={{
-                      padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none',
-                      backgroundColor: '#D97706', color: '#FFFFFF', fontSize: '0.85rem', fontWeight: 800,
-                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
-                      boxShadow: '0 4px 6px -1px rgba(217, 119, 6, 0.2)'
-                    }}
-                  >
-                    <PlusCircle size={16} /> Create New Study Zone
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={async () => {
+                        if (window.confirm("Delete all legacy zones from Firebase and register the 5 exact study zones matching the floor layout?")) {
+                          const res = await resetAndSeedZones();
+                          if (res && res.success) {
+                            alert("✅ Successfully deleted existing zone documents from Firebase and initialized the 5 official floor layout study zones!");
+                          } else {
+                            alert("Failed to reset zones: " + (res?.error || 'Unknown error'));
+                          }
+                        }
+                      }}
+                      style={{
+                        padding: '0.6rem 1.15rem', borderRadius: '8px', border: '1px solid #7C3AED',
+                        backgroundColor: '#F5F3FF', color: '#7C3AED', fontSize: '0.85rem', fontWeight: 800,
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem'
+                      }}
+                    >
+                      <RefreshCw size={15} /> Delete & Reset to Floor Layout Zones
+                    </button>
+                    <button
+                      onClick={() => handleOpenZoneModal(null)}
+                      style={{
+                        padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none',
+                        backgroundColor: '#D97706', color: '#FFFFFF', fontSize: '0.85rem', fontWeight: 800,
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
+                        boxShadow: '0 4px 6px -1px rgba(217, 119, 6, 0.2)'
+                      }}
+                    >
+                      <PlusCircle size={16} /> Create New Study Zone
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
@@ -2372,7 +2529,10 @@ export const AdminPage = () => {
 
                       <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
                         <button
-                          onClick={() => confirmBooking(booking.id, booking.seatId)}
+                          onClick={() => {
+                            setSelectedBookingForConfirmation(booking);
+                            setShowReservationConfirmModal(true);
+                          }}
                           style={{
                             flex: 1,
                             backgroundColor: '#059669',
@@ -2531,7 +2691,14 @@ export const AdminPage = () => {
                             <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexWrap: 'nowrap' }}>
                               <select
                                 value={b.status}
-                                onChange={(e) => changeBookingStatus(b.id, b.seatId, e.target.value)}
+                                onChange={(e) => {
+                                  if (e.target.value === 'CONFIRMED' && b.status === 'PENDING_CONFIRMATION') {
+                                    setSelectedBookingForConfirmation(b);
+                                    setShowReservationConfirmModal(true);
+                                  } else {
+                                    changeBookingStatus(b.id, b.seatId, e.target.value);
+                                  }
+                                }}
                                 style={{ padding: '0.3rem 0.4rem', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}
                               >
                                 <option value="PENDING_CONFIRMATION">Pending</option>
@@ -3094,10 +3261,18 @@ export const AdminPage = () => {
                   Cancel
                 </button>
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={(e) => handleRegisterUserSubmit(e, false)}
+                  style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#0F172A', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Register Only (Close)
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleRegisterUserSubmit(e, true)}
                   style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: 'none', backgroundColor: '#0F172A', color: '#FFFFFF', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
                 >
-                  Register User Profile
+                  Register & Create Booking
                 </button>
               </div>
             </form>
@@ -4212,13 +4387,19 @@ export const AdminPage = () => {
                   <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Study Zone *</label>
                   <select
                     value={seatForm.zone}
-                    onChange={e => setSeatForm({ ...seatForm, zone: e.target.value })}
+                    onChange={e => {
+                      const selectedZ = zones.find(z => z.name === e.target.value);
+                      setSeatForm({ 
+                        ...seatForm, 
+                        zone: e.target.value,
+                        pricePerDay: selectedZ ? selectedZ.pricePerDay : seatForm.pricePerDay
+                      });
+                    }}
                     style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', fontWeight: 600, boxSizing: 'border-box' }}
                   >
-                    <option value="Quiet Zone Alpha">Quiet Zone Alpha</option>
-                    <option value="Window Nook">Window Nook</option>
-                    <option value="Private Pods">Private Pods</option>
-                    <option value="Collaborative Hub">Collaborative Hub</option>
+                    {zones.map(z => (
+                      <option key={z.id} value={z.name}>{z.name} (NPR {z.pricePerDay}/day)</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -4408,6 +4589,206 @@ export const AdminPage = () => {
           </div>
         </div>
       )}
+
+      {/* ==================== WALK-IN STUDENT ADMISSION MODAL ==================== */}
+      <WalkinStudentModal
+        isOpen={showWalkinStudentModal}
+        onClose={() => {
+          setShowWalkinStudentModal(false);
+          setPreselectedSeatForWalkin(null);
+        }}
+        seats={seats}
+        lockers={lockers}
+        plans={plans}
+        preselectedSeat={preselectedSeatForWalkin}
+        onSubmitSuccess={handleWalkinStudentRegistration}
+      />
+
+      {/* ==================== REGISTRATION RECEIPT VOUCHER MODAL ==================== */}
+      <RegistrationReceiptModal
+        isOpen={showRegistrationReceiptModal}
+        onClose={() => {
+          setShowRegistrationReceiptModal(false);
+          setRegistrationReceiptData(null);
+        }}
+        receiptData={registrationReceiptData}
+      />
+
+      <CabinStudentSelectModal
+        isOpen={showCabinStudentModal}
+        onClose={() => {
+          setShowCabinStudentModal(false);
+          setSelectedSeatForCabinModal(null);
+        }}
+        cabinSeat={selectedSeatForCabinModal}
+        onAssignStudent={async (seat, student, mode, bookingDetails = {}) => {
+          try {
+            const {
+              passType = 'DAILY', shift = 'FULL_DAY', shiftTime = '07:00 AM – 10:00 PM',
+              startDate = new Date().toISOString().split('T')[0],
+              endDate = new Date().toISOString().split('T')[0],
+              hasLocker = false, lockerNumber = '',
+              paymentMethod = 'CASH', amountPaid = 0,
+              pendingAmount = 0, paymentStatus = 'PAID',
+              totalAmount = seat.pricePerDay || 500,
+              basePrice = seat.pricePerDay || 500, lockerFee = 0,
+              bookingTime = shiftTime
+            } = bookingDetails;
+
+            const displayName = student.fullName || student.name || 'Scholar';
+            const newStatus = mode === 'BOOK' ? 'OCCUPIED' : 'RESERVED';
+
+            // 1) Create booking in Firestore
+            const bookingCode = `QD-MAP-${Math.floor(1000 + Math.random() * 9000)}`;
+            await createBooking({
+              bookingCode,
+              userId: student.id,
+              userCode: student.userCode || '',
+              userName: displayName,
+              userEmail: student.email || '',
+              userPhone: student.phone || '',
+              seatId: seat.id,
+              seatNumber: seat.seatNumber,
+              zone: seat.zone || '',
+              passType,
+              shift,
+              bookingTime,
+              startDate,
+              endDate,
+              hasLocker,
+              lockerNumber: hasLocker ? lockerNumber : '',
+              basePrice: Number(basePrice),
+              lockerFee: Number(lockerFee),
+              totalAmount: Number(totalAmount),
+              amountPaid: Number(amountPaid),
+              pendingAmount: Number(pendingAmount),
+              paymentStatus,
+              paymentMethod,
+              paymentHistory: Number(amountPaid) > 0 ? [{
+                amount: Number(amountPaid),
+                method: paymentMethod,
+                type: Number(pendingAmount) === 0 ? 'FULL' : 'ADVANCE',
+                note: 'Admin Floor Map Assignment',
+                recordedAt: new Date().toISOString()
+              }] : [],
+              status: 'CONFIRMED',
+              bookingType: 'ADMIN_FLOOR_MAP',
+              createdAt: new Date().toISOString()
+            });
+
+            // 2) Update seat status in Firestore
+            await changeSeatStatus(seat.id, newStatus);
+
+            // 3) Assign locker if requested
+            if (hasLocker && lockerNumber) {
+              const matchingLocker = lockers.find(l => l.lockerNumber === lockerNumber || l.id === lockerNumber);
+              if (matchingLocker) {
+                await assignLocker(matchingLocker.id, {
+                  userId: student.id,
+                  userName: displayName,
+                  userPhone: student.phone || '',
+                  userEmail: student.email || '',
+                  seatNumber: seat.seatNumber,
+                  passType,
+                  startDate,
+                  endDate,
+                  notes: `Assigned from floor map to ${displayName}`
+                });
+              }
+            }
+
+            // 4) Update user record
+            await updateUser(student.id, {
+              assignedSeat: `Desk ${seat.seatNumber}`,
+              seatNumber: seat.seatNumber,
+              passType,
+              status: 'ACTIVE',
+              membershipStatus: 'ACTIVE'
+            });
+
+            alert(`✅ Desk ${seat.seatNumber} assigned to ${displayName}!\nBooking Code: ${bookingCode}\nTotal: NPR ${Number(totalAmount).toLocaleString()}${Number(pendingAmount) > 0 ? `\n⚠ Due: NPR ${Number(pendingAmount).toLocaleString()}` : ' (Fully Paid)'}`);
+          } catch (err) {
+            console.error('Error assigning student:', err);
+            alert('Failed to assign student: ' + err.message);
+          }
+        }}
+        onReleaseCabin={async (seat) => {
+          try {
+            const activeBooking = bookings.find(b =>
+              (b.seatId === seat.id || b.seatNumber === seat.seatNumber) &&
+              ['CHECKED_IN', 'OCCUPIED', 'RESERVED', 'CONFIRMED'].includes(b.status)
+            );
+            if (activeBooking) {
+              await changeBookingStatus(activeBooking.id, seat.id, 'COMPLETED');
+              // Also release any locker assigned to this booking
+              if (activeBooking.lockerNumber) {
+                const matchingLocker = lockers.find(l => l.lockerNumber === activeBooking.lockerNumber);
+                if (matchingLocker && matchingLocker.status === 'ASSIGNED') {
+                  await releaseLocker(matchingLocker.id);
+                }
+              }
+            } else {
+              await changeSeatStatus(seat.id, 'AVAILABLE');
+            }
+            alert(`✅ Desk #${seat.seatNumber} is now AVAILABLE.`);
+          } catch (err) {
+            console.error('Error releasing cabin:', err);
+            alert('Failed to release cabin: ' + err.message);
+          }
+        }}
+        onOpenWalkinForCabin={(seat) => {
+          setShowCabinStudentModal(false);
+          setPreselectedSeatForWalkin(seat);
+          setShowWalkinStudentModal(true);
+        }}
+      />
+
+      {/* ==================== DIGITAL STORAGE LOCKER MANAGE MODAL ==================== */}
+      <LockerManageModal
+        isOpen={showLockerModal}
+        onClose={() => {
+          setShowLockerModal(false);
+          setSelectedLockerForModal(null);
+        }}
+        locker={selectedLockerForModal}
+        onAssignLocker={async (lockerId, assignmentData) => {
+          try {
+            await assignLocker(lockerId, assignmentData);
+            alert(`✅ ${selectedLockerForModal?.label || selectedLockerForModal?.lockerNumber} successfully assigned to ${assignmentData.userName}!`);
+          } catch (err) {
+            console.error('Error assigning locker:', err);
+            alert('Failed to assign locker: ' + err.message);
+          }
+        }}
+        onReleaseLocker={async (lockerId) => {
+          try {
+            await releaseLocker(lockerId);
+            alert(`✅ ${selectedLockerForModal?.label || selectedLockerForModal?.lockerNumber} is now set back to AVAILABLE.`);
+          } catch (err) {
+            console.error('Error releasing locker:', err);
+            alert('Failed to release locker: ' + err.message);
+          }
+        }}
+        onUpdateStatus={async (lockerId, status, details) => {
+          try {
+            await updateLockerStatus(lockerId, status, details);
+            alert(`✅ ${selectedLockerForModal?.label || selectedLockerForModal?.lockerNumber} status updated to ${status}.`);
+          } catch (err) {
+            console.error('Error updating locker status:', err);
+            alert('Failed to update status: ' + err.message);
+          }
+        }}
+      />
+
+      <ReservationConfirmModal
+        isOpen={showReservationConfirmModal}
+        onClose={() => {
+          setShowReservationConfirmModal(false);
+          setSelectedBookingForConfirmation(null);
+        }}
+        booking={selectedBookingForConfirmation}
+      />
+
     </div>
   );
 };

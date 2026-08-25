@@ -1,21 +1,171 @@
+// 62 Architectural Cabins matching the Floor Layout Map
 export const MOCK_SEATS = [
-  { id: 'seat_A1', seatNumber: 'A1', zone: 'Quiet Zone Alpha', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp'] },
-  { id: 'seat_A2', seatNumber: 'A2', zone: 'Quiet Zone Alpha', type: 'STANDARD', status: 'OCCUPIED', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp'] },
-  { id: 'seat_A3', seatNumber: 'A3', zone: 'Quiet Zone Alpha', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp'] },
-  { id: 'seat_A4', seatNumber: 'A4', zone: 'Quiet Zone Alpha', type: 'STANDARD', status: 'RESERVED', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp'] },
-  { id: 'seat_A5', seatNumber: 'A5', zone: 'Quiet Zone Alpha', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp'] },
-  { id: 'seat_A6', seatNumber: 'A6', zone: 'Quiet Zone Alpha', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp'] },
-  { id: 'seat_A7', seatNumber: 'A7', zone: 'Quiet Zone Alpha', type: 'STANDARD', status: 'OCCUPIED', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp'] },
-  { id: 'seat_A8', seatNumber: 'A8', zone: 'Quiet Zone Alpha', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp'] },
-  { id: 'seat_B1', seatNumber: 'B1', zone: 'Window Nook', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet'] },
-  { id: 'seat_B2', seatNumber: 'B2', zone: 'Window Nook', type: 'PREMIUM_WINDOW', status: 'OCCUPIED', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet'] },
-  { id: 'seat_B3', seatNumber: 'B3', zone: 'Window Nook', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet'] },
-  { id: 'seat_B4', seatNumber: 'B4', zone: 'Window Nook', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet'] },
-  { id: 'seat_C1', seatNumber: 'C1', zone: 'Private Pods', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 1200, amenities: ['Sound Isolation', 'Ergonomic Desk', 'Private Locker'] },
-  { id: 'seat_C2', seatNumber: 'C2', zone: 'Private Pods', type: 'PRIVATE_CABIN', status: 'RESERVED', pricePerDay: 1200, amenities: ['Sound Isolation', 'Ergonomic Desk', 'Private Locker'] },
-  { id: 'seat_C3', seatNumber: 'C3', zone: 'Private Pods', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 1200, amenities: ['Sound Isolation', 'Ergonomic Desk', 'Private Locker'] },
-  { id: 'seat_C4', seatNumber: 'C4', zone: 'Private Pods', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 1200, amenities: ['Sound Isolation', 'Ergonomic Desk', 'Private Locker'] }
+  // ── 1. Left Quiet Row (A1–A13) — NPR 500/day (13 Desks) ──
+  { id: 'seat_A1', seatNumber: 'A1', zone: 'Left Quiet Row (Zone A)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_A2', seatNumber: 'A2', zone: 'Left Quiet Row (Zone A)', type: 'STANDARD', status: 'OCCUPIED', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_A3', seatNumber: 'A3', zone: 'Left Quiet Row (Zone A)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_A4', seatNumber: 'A4', zone: 'Left Quiet Row (Zone A)', type: 'STANDARD', status: 'RESERVED', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_A5', seatNumber: 'A5', zone: 'Left Quiet Row (Zone A)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_A6', seatNumber: 'A6', zone: 'Left Quiet Row (Zone A)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_A7', seatNumber: 'A7', zone: 'Left Quiet Row (Zone A)', type: 'STANDARD', status: 'OCCUPIED', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_A8', seatNumber: 'A8', zone: 'Left Quiet Row (Zone A)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_A9', seatNumber: 'A9', zone: 'Left Quiet Row (Zone A)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_A10', seatNumber: 'A10', zone: 'Left Quiet Row (Zone A)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_A11', seatNumber: 'A11', zone: 'Left Quiet Row (Zone A)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_A12', seatNumber: 'A12', zone: 'Left Quiet Row (Zone A)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_A13', seatNumber: 'A13', zone: 'Left Quiet Row (Zone A)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 500, amenities: ['Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+
+  // ── 2. Center Focus Row (C1–C24) — NPR 600/day (24 Cabins) ──
+  { id: 'seat_C1', seatNumber: 'C1', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C2', seatNumber: 'C2', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'OCCUPIED', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C3', seatNumber: 'C3', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C4', seatNumber: 'C4', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C5', seatNumber: 'C5', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C6', seatNumber: 'C6', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C7', seatNumber: 'C7', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C8', seatNumber: 'C8', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C9', seatNumber: 'C9', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C10', seatNumber: 'C10', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C11', seatNumber: 'C11', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C12', seatNumber: 'C12', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C13', seatNumber: 'C13', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C14', seatNumber: 'C14', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C15', seatNumber: 'C15', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C16', seatNumber: 'C16', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C17', seatNumber: 'C17', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C18', seatNumber: 'C18', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C19', seatNumber: 'C19', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C20', seatNumber: 'C20', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C21', seatNumber: 'C21', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C22', seatNumber: 'C22', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C23', seatNumber: 'C23', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+  { id: 'seat_C24', seatNumber: 'C24', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
+
+  // ── 3. Center T-Wing Section (T1–T4) — NPR 550/day (4 Cabins) ──
+  { id: 'seat_T1', seatNumber: 'T1', zone: 'Center T-Wing Section (Zone T)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 550, amenities: ['Power Outlet', 'Wide Desk', 'Ergonomic Chair'] },
+  { id: 'seat_T2', seatNumber: 'T2', zone: 'Center T-Wing Section (Zone T)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 550, amenities: ['Power Outlet', 'Wide Desk', 'Ergonomic Chair'] },
+  { id: 'seat_T3', seatNumber: 'T3', zone: 'Center T-Wing Section (Zone T)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 550, amenities: ['Power Outlet', 'Wide Desk', 'Ergonomic Chair'] },
+  { id: 'seat_T4', seatNumber: 'T4', zone: 'Center T-Wing Section (Zone T)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 550, amenities: ['Power Outlet', 'Wide Desk', 'Ergonomic Chair'] },
+
+  // ── 4. South Baseline Row (B1–B6) — NPR 450/day (6 Cabins) ──
+  { id: 'seat_B1', seatNumber: 'B1', zone: 'South Baseline Row (Zone B)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 450, amenities: ['Power Outlet', 'Reading Lamp'] },
+  { id: 'seat_B2', seatNumber: 'B2', zone: 'South Baseline Row (Zone B)', type: 'STANDARD', status: 'OCCUPIED', pricePerDay: 450, amenities: ['Power Outlet', 'Reading Lamp'] },
+  { id: 'seat_B3', seatNumber: 'B3', zone: 'South Baseline Row (Zone B)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 450, amenities: ['Power Outlet', 'Reading Lamp'] },
+  { id: 'seat_B4', seatNumber: 'B4', zone: 'South Baseline Row (Zone B)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 450, amenities: ['Power Outlet', 'Reading Lamp'] },
+  { id: 'seat_B5', seatNumber: 'B5', zone: 'South Baseline Row (Zone B)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 450, amenities: ['Power Outlet', 'Reading Lamp'] },
+  { id: 'seat_B6', seatNumber: 'B6', zone: 'South Baseline Row (Zone B)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 450, amenities: ['Power Outlet', 'Reading Lamp'] },
+
+  // ── 5. Right Window Wall (R1–R15) — NPR 700/day (15 Desks) ──
+  { id: 'seat_R1', seatNumber: 'R1', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
+  { id: 'seat_R2', seatNumber: 'R2', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
+  { id: 'seat_R3', seatNumber: 'R3', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
+  { id: 'seat_R4', seatNumber: 'R4', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
+  { id: 'seat_R5', seatNumber: 'R5', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
+  { id: 'seat_R6', seatNumber: 'R6', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
+  { id: 'seat_R7', seatNumber: 'R7', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
+  { id: 'seat_R8', seatNumber: 'R8', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
+  { id: 'seat_R9', seatNumber: 'R9', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
+  { id: 'seat_R10', seatNumber: 'R10', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
+  { id: 'seat_R11', seatNumber: 'R11', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
+  { id: 'seat_R12', seatNumber: 'R12', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
+  { id: 'seat_R13', seatNumber: 'R13', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
+  { id: 'seat_R14', seatNumber: 'R14', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
+  { id: 'seat_R15', seatNumber: 'R15', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] }
 ];
+
+// 20 Digital Storage Lockers (L-01 to L-20)
+export const MOCK_LOCKERS = Array.from({ length: 20 }, (_, idx) => {
+  const num = idx + 1;
+  const numStr = num < 10 ? `0${num}` : `${num}`;
+  const lockerId = `locker_${numStr}`;
+  const lockerNumber = `L-${numStr}`;
+
+  if (num === 1) {
+    return {
+      id: lockerId,
+      lockerNumber,
+      label: `Locker ${numStr}`,
+      location: 'South Storage Bank (Locker Unit 01)',
+      type: 'DIGITAL_KEYPAD',
+      status: 'ASSIGNED',
+      pinCode: '4912',
+      assignedToUserId: 'usr_104',
+      assignedToUserName: 'Sneha Gurung',
+      assignedToUserPhone: '+977 9812345678',
+      assignedToUserEmail: 'sneha.g@example.com',
+      assignedSeatNumber: 'C2',
+      passType: 'MONTHLY',
+      startDate: '2026-08-01',
+      endDate: '2026-08-31',
+      notes: 'Full-month storage for laptop & documents.',
+      createdAt: '2026-08-01T08:00:00Z'
+    };
+  }
+
+  if (num === 2) {
+    return {
+      id: lockerId,
+      lockerNumber,
+      label: `Locker ${numStr}`,
+      location: 'South Storage Bank (Locker Unit 02)',
+      type: 'DIGITAL_KEYPAD',
+      status: 'ASSIGNED',
+      pinCode: '8831',
+      assignedToUserId: 'usr_102',
+      assignedToUserName: 'Pooja Shrestha',
+      assignedToUserPhone: '+977 9851098765',
+      assignedToUserEmail: 'pooja.s@example.com',
+      assignedSeatNumber: 'B2',
+      passType: 'WEEKLY',
+      startDate: '2026-08-18',
+      endDate: '2026-08-25',
+      notes: 'Weekly storage locker with keypad access.',
+      createdAt: '2026-08-18T14:15:00Z'
+    };
+  }
+
+  if (num === 15) {
+    return {
+      id: lockerId,
+      lockerNumber,
+      label: `Locker ${numStr}`,
+      location: 'South Storage Bank (Locker Unit 15)',
+      type: 'DIGITAL_KEYPAD',
+      status: 'MAINTENANCE',
+      pinCode: '0000',
+      assignedToUserId: null,
+      assignedToUserName: null,
+      assignedToUserPhone: null,
+      assignedToUserEmail: null,
+      assignedSeatNumber: null,
+      passType: null,
+      startDate: null,
+      endDate: null,
+      notes: 'Electronic lock keypad battery replacement in progress.',
+      createdAt: '2026-08-10T10:00:00Z'
+    };
+  }
+
+  return {
+    id: lockerId,
+    lockerNumber,
+    label: `Locker ${numStr}`,
+    location: `South Storage Bank (Locker Unit ${numStr})`,
+    type: 'DIGITAL_KEYPAD',
+    status: 'AVAILABLE',
+    pinCode: null,
+    assignedToUserId: null,
+    assignedToUserName: null,
+    assignedToUserPhone: null,
+    assignedToUserEmail: null,
+    assignedSeatNumber: null,
+    passType: null,
+    startDate: null,
+    endDate: null,
+    notes: '',
+    createdAt: '2026-08-01T00:00:00Z'
+  };
+});
 
 export const ACCESS_PLANS = [
   {
@@ -93,6 +243,7 @@ export const MOCK_BOOKINGS = [
     status: 'CONFIRMED',
     totalAmount: 500,
     paymentStatus: 'PAID',
+    hasLocker: false,
     createdAt: '2026-08-19T09:30:00Z'
   },
   {
@@ -109,8 +260,10 @@ export const MOCK_BOOKINGS = [
     startDate: '2026-08-18',
     endDate: '2026-08-25',
     status: 'CHECKED_IN',
-    totalAmount: 2800,
+    totalAmount: 3100,
     paymentStatus: 'PAID',
+    hasLocker: true,
+    lockerNumber: 'L-02',
     createdAt: '2026-08-18T14:15:00Z'
   },
   {
@@ -129,6 +282,7 @@ export const MOCK_BOOKINGS = [
     status: 'CHECKED_IN',
     totalAmount: 500,
     paymentStatus: 'PAID',
+    hasLocker: false,
     createdAt: '2026-08-19T10:00:00Z'
   },
   {
@@ -145,45 +299,10 @@ export const MOCK_BOOKINGS = [
     startDate: '2026-08-01',
     endDate: '2026-08-31',
     status: 'CONFIRMED',
-    totalAmount: 9500,
+    totalAmount: 10500,
     paymentStatus: 'PAID',
+    hasLocker: true,
+    lockerNumber: 'L-01',
     createdAt: '2026-08-01T08:00:00Z'
-  },
-  {
-    id: 'bk_105',
-    bookingCode: 'QD-6289',
-    seatId: 'seat_A4',
-    seatNumber: 'A4',
-    userName: 'Kiran Adhikari',
-    userEmail: 'kiran.a@example.com',
-    userPhone: '+977 9849988776',
-    passType: 'DAILY',
-    shift: 'Evening (5:00 PM - 10:00 PM)',
-    bookingTime: '05:00 PM - 10:00 PM',
-    startDate: '2026-08-19',
-    endDate: '2026-08-19',
-    status: 'PENDING_CONFIRMATION',
-    totalAmount: 500,
-    paymentStatus: 'PENDING',
-    createdAt: '2026-08-19T11:45:00Z'
-  },
-  {
-    id: 'bk_106',
-    bookingCode: 'QD-5190',
-    seatId: 'seat_B1',
-    seatNumber: 'B1',
-    userName: 'Bina Maharjan',
-    userEmail: 'bina.m@example.com',
-    userPhone: '+977 9860112233',
-    passType: 'WEEKLY',
-    shift: 'Morning (7:00 AM - 12:00 PM)',
-    bookingTime: '07:00 AM - 12:00 PM',
-    startDate: '2026-08-20',
-    endDate: '2026-08-27',
-    status: 'CONFIRMED',
-    totalAmount: 2800,
-    paymentStatus: 'PENDING',
-    createdAt: '2026-08-19T12:10:00Z'
   }
 ];
-
