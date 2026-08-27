@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useBooking } from '../context/BookingContext';
 import { 
   Shield, RefreshCw, LogOut, Search, Database, CheckCircle2, ArrowLeft, 
-  LayoutDashboard, Grid, Calendar, DollarSign, Settings, ChevronRight, 
+  LayoutDashboard, Grid, Calendar, DollarSign, Settings, ChevronRight, ChevronLeft, Menu,
   UserCheck, AlertCircle, Clock, TrendingUp, CreditCard, ChevronDown, Check, X,
   Users, UserPlus, Package, Edit, Edit3, Plus, Eye, Trash2, Lock, Tag, XCircle, Phone, Mail, User,
   PlusCircle, Sparkles, Layers, Sliders, MapPin, FileText, CheckCircle, Printer, Copy, AlertTriangle,
@@ -35,6 +35,8 @@ export const AdminPage = () => {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState('OVERVIEW'); // OVERVIEW, USERS, DESKS, BOOKINGS, PACKAGES, FINANCE, SYSTEM
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Desktop icon-only minimized mode
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // Mobile drawer toggle
   const [searchQuery, setSearchQuery] = useState('');
   const [seedingStatus, setSeedingStatus] = useState(null);
   const [isSeeding, setIsSeeding] = useState(false);
@@ -1016,264 +1018,357 @@ export const AdminPage = () => {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#F8FAFC', color: '#0F172A', fontFamily: 'Inter, system-ui, sans-serif' }}>
       
+      <style>{`
+        /* Responsive Admin Sidebar & Topbar */
+        .admin-mobile-topbar {
+          display: none;
+        }
+        .admin-sidebar-drawer {
+          transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .admin-main-content {
+          flex: 1;
+          padding: 2rem 2.5rem;
+          overflow-y: auto;
+          min-width: 0;
+          transition: all 0.22s ease;
+        }
+        .admin-mobile-close {
+          display: none !important;
+        }
+
+        @media (max-width: 900px) {
+          .admin-mobile-topbar {
+            display: flex !important;
+            align-items: center;
+            justify-content: space-between;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background-color: #0F1E36;
+            color: #FFFFFF;
+            padding: 0 1.25rem;
+            z-index: 1050;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          }
+          .admin-sidebar-drawer {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            bottom: 0 !important;
+            height: 100vh !important;
+            width: 280px !important;
+            z-index: 1100 !important;
+            transform: translateX(-100%);
+            box-shadow: 4px 0 24px rgba(0,0,0,0.25);
+          }
+          .admin-sidebar-drawer.mobile-open {
+            transform: translateX(0) !important;
+          }
+          .admin-main-content {
+            padding: 1.25rem 1rem !important;
+            margin-top: 60px !important;
+          }
+          .admin-desktop-toggle {
+            display: none !important;
+          }
+          .admin-mobile-close {
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+          }
+        }
+      `}</style>
+
+      {/* ==================== MOBILE TOPBAR (3-line hamburger menu) ==================== */}
+      <header className="admin-mobile-topbar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle navigation menu"
+            style={{
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: 'none',
+              borderRadius: '8px',
+              color: '#FFFFFF',
+              width: '38px',
+              height: '38px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer'
+            }}
+          >
+            {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+            <Shield size={18} style={{ color: '#F59E0B' }} />
+            <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#FFFFFF', letterSpacing: '0.02em' }}>
+              The Quiet Desk
+            </span>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setShowWalkinStudentModal(true)}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.35rem',
+            backgroundColor: '#059669',
+            color: '#FFFFFF',
+            border: 'none',
+            padding: '0.4rem 0.75rem',
+            borderRadius: '6px',
+            fontSize: '0.78rem',
+            fontWeight: 700,
+            cursor: 'pointer'
+          }}
+        >
+          <UserPlus size={14} /> Walk-in
+        </button>
+      </header>
+
+      {/* Mobile Drawer Backdrop */}
+      {mobileMenuOpen && (
+        <div
+          onClick={() => setMobileMenuOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.7)',
+            backdropFilter: 'blur(3px)',
+            zIndex: 1090
+          }}
+        />
+      )}
+
       {/* ==================== LEFT SIDEBAR NAVIGATION ==================== */}
-      <aside style={{
-        width: '270px',
-        backgroundColor: '#0F1E36',
-        color: '#F8FAFC',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-        padding: '1.5rem 1rem',
-        borderRight: '1px solid rgba(255, 255, 255, 0.1)',
-        position: 'sticky',
-        top: 0,
-        height: '100vh',
-        boxSizing: 'border-box',
-        zIndex: 100
-      }}>
+      <aside
+        className={`admin-sidebar-drawer ${mobileMenuOpen ? 'mobile-open' : ''}`}
+        style={{
+          width: sidebarCollapsed ? '76px' : '270px',
+          backgroundColor: '#0F1E36',
+          color: '#F8FAFC',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          padding: sidebarCollapsed ? '1.25rem 0.5rem' : '1.5rem 1rem',
+          borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+          position: 'sticky',
+          top: 0,
+          height: '100vh',
+          boxSizing: 'border-box',
+          zIndex: 1100,
+          flexShrink: 0
+        }}
+      >
         <div>
           {/* Brand Header */}
-          <div style={{ padding: '0 0.5rem 1.5rem 0.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', marginBottom: '1.25rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#D97706', fontWeight: 800, fontSize: '0.8rem', letterSpacing: '0.5px' }}>
-              <Shield size={18} /> ADMIN DASHBOARD
-            </div>
-            <h1 style={{ color: '#FFFFFF', fontSize: '1.25rem', fontWeight: 700, margin: '0.2rem 0 0 0' }}>
-              The Quiet Desk
-            </h1>
-            <div style={{ fontSize: '0.75rem', color: '#94A3B8', marginTop: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }}></span>
-              Lazimpat Branch • Online
-            </div>
+          <div style={{
+            padding: sidebarCollapsed ? '0 0 1.25rem 0' : '0 0.5rem 1.5rem 0.5rem',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+            marginBottom: '1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: sidebarCollapsed ? 'center' : 'space-between'
+          }}>
+            {!sidebarCollapsed ? (
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#D97706', fontWeight: 800, fontSize: '0.8rem', letterSpacing: '0.5px' }}>
+                  <Shield size={18} /> ADMIN DASHBOARD
+                </div>
+                <h1 style={{ color: '#FFFFFF', fontSize: '1.2rem', fontWeight: 700, margin: '0.2rem 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  The Quiet Desk
+                </h1>
+                <div style={{ fontSize: '0.75rem', color: '#94A3B8', marginTop: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block', flexShrink: 0 }}></span>
+                  <span style={{ whiteSpace: 'nowrap' }}>Lazimpat • Online</span>
+                </div>
+              </div>
+            ) : (
+              <div title="The Quiet Desk Admin" style={{ color: '#F59E0B', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <Shield size={24} />
+              </div>
+            )}
+
+            {/* Desktop Collapse Toggle Button */}
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="admin-desktop-toggle"
+              title={sidebarCollapsed ? "Expand Sidebar" : "Minimize Sidebar"}
+              style={{
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                borderRadius: '6px',
+                color: '#CBD5E1',
+                width: '28px',
+                height: '28px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                flexShrink: 0,
+                marginLeft: sidebarCollapsed ? 0 : '0.5rem',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
+
+            {/* Mobile Close Button */}
+            <button
+              onClick={() => setMobileMenuOpen(false)}
+              className="admin-mobile-close"
+              aria-label="Close menu"
+              style={{
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: 'none',
+                borderRadius: '6px',
+                color: '#FFF',
+                padding: '0.35rem',
+                cursor: 'pointer'
+              }}
+            >
+              <X size={18} />
+            </button>
           </div>
 
           {/* Navigation Links */}
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-            
-            <button
-              onClick={() => setActiveTab('OVERVIEW')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0.75rem 0.85rem',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: activeTab === 'OVERVIEW' ? '#1E293B' : 'transparent',
-                color: activeTab === 'OVERVIEW' ? '#F59E0B' : '#94A3B8',
-                fontWeight: activeTab === 'OVERVIEW' ? 700 : 500,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <LayoutDashboard size={18} />
-                Overview
-              </div>
-              <ChevronRight size={14} style={{ opacity: activeTab === 'OVERVIEW' ? 1 : 0.4 }} />
-            </button>
+            {[
+              { id: 'OVERVIEW', label: 'Overview', icon: <LayoutDashboard size={18} /> },
+              { id: 'USERS', label: 'Users & Profiles', icon: <Users size={18} />, badge: users.length },
+              { id: 'DESKS', label: 'Manage Stations & Zones', icon: <Grid size={18} />, badge: totalSeats, activeColor: '#38BDF8' },
+              {
+                id: 'BOOKINGS',
+                label: 'Bookings Queue',
+                icon: <Calendar size={18} />,
+                badge: pendingConfirmations.length > 0 ? `${pendingConfirmations.length} Pending` : bookings.length,
+                isAlert: pendingConfirmations.length > 0
+              },
+              { id: 'PACKAGES', label: 'Access Packages', icon: <Package size={18} />, badge: plans.length },
+              { id: 'FINANCE', label: 'Finance & Revenue', icon: <CreditCard size={18} />, badge: 'NPR', isSuccess: true },
+              { id: 'SYSTEM', label: 'System & Database', icon: <Settings size={18} /> },
+            ].map(item => {
+              const isActive = activeTab === item.id;
+              const activeColor = item.activeColor || '#F59E0B';
 
-            <button
-              onClick={() => setActiveTab('USERS')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0.75rem 0.85rem',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: activeTab === 'USERS' ? '#1E293B' : 'transparent',
-                color: activeTab === 'USERS' ? '#F59E0B' : '#94A3B8',
-                fontWeight: activeTab === 'USERS' ? 700 : 500,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <Users size={18} />
-                Users & Profiles
-              </div>
-              <span style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: '0.15rem 0.5rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, color: '#E2E8F0' }}>
-                {users.length}
-              </span>
-            </button>
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    setMobileMenuOpen(false);
+                  }}
+                  title={item.label}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: sidebarCollapsed ? 'center' : 'space-between',
+                    padding: sidebarCollapsed ? '0.75rem 0' : '0.75rem 0.85rem',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: isActive ? '#1E293B' : 'transparent',
+                    color: isActive ? activeColor : '#94A3B8',
+                    fontWeight: isActive ? 700 : 500,
+                    fontSize: '0.9rem',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'all 0.15s ease',
+                    position: 'relative'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: sidebarCollapsed ? 0 : '0.75rem' }}>
+                    {React.cloneElement(item.icon, {
+                      size: sidebarCollapsed ? 20 : 18,
+                      style: { flexShrink: 0, color: isActive ? activeColor : '#94A3B8' }
+                    })}
+                    {!sidebarCollapsed && <span>{item.label}</span>}
+                  </div>
 
-            <button
-              onClick={() => setActiveTab('DESKS')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0.75rem 0.85rem',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: activeTab === 'DESKS' ? '#1E293B' : 'transparent',
-                color: activeTab === 'DESKS' ? '#38BDF8' : '#94A3B8',
-                fontWeight: activeTab === 'DESKS' ? 700 : 500,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <Grid size={18} />
-                Manage Stations & Zones
-              </div>
-              <span style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: '0.15rem 0.5rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, color: '#E2E8F0' }}>
-                {totalSeats}
-              </span>
-            </button>
+                  {!sidebarCollapsed && (
+                    <div>
+                      {item.badge !== undefined && (
+                        <span style={{
+                          backgroundColor: item.isAlert ? '#D97706' : item.isSuccess ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.1)',
+                          color: item.isAlert ? '#FFFFFF' : item.isSuccess ? '#34D399' : '#E2E8F0',
+                          padding: '0.15rem 0.5rem',
+                          borderRadius: '12px',
+                          fontSize: '0.75rem',
+                          fontWeight: item.isAlert || item.isSuccess ? 700 : 600
+                        }}>
+                          {item.badge}
+                        </span>
+                      )}
+                      {item.id === 'OVERVIEW' && (
+                        <ChevronRight size={14} style={{ opacity: isActive ? 1 : 0.4 }} />
+                      )}
+                    </div>
+                  )}
 
-
-            <button
-              onClick={() => setActiveTab('BOOKINGS')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0.75rem 0.85rem',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: activeTab === 'BOOKINGS' ? '#1E293B' : 'transparent',
-                color: activeTab === 'BOOKINGS' ? '#F59E0B' : '#94A3B8',
-                fontWeight: activeTab === 'BOOKINGS' ? 700 : 500,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <Calendar size={18} />
-                Bookings Queue
-              </div>
-              {pendingConfirmations.length > 0 ? (
-                <span style={{ backgroundColor: '#D97706', color: '#FFFFFF', padding: '0.15rem 0.5rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700 }}>
-                  {pendingConfirmations.length} Pending
-                </span>
-              ) : (
-                <span style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: '0.15rem 0.5rem', borderRadius: '12px', fontSize: '0.75rem', color: '#94A3B8' }}>
-                  {bookings.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setActiveTab('PACKAGES')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0.75rem 0.85rem',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: activeTab === 'PACKAGES' ? '#1E293B' : 'transparent',
-                color: activeTab === 'PACKAGES' ? '#F59E0B' : '#94A3B8',
-                fontWeight: activeTab === 'PACKAGES' ? 700 : 500,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <Package size={18} />
-                Access Packages
-              </div>
-              <span style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: '0.15rem 0.5rem', borderRadius: '12px', fontSize: '0.75rem', color: '#94A3B8' }}>
-                {plans.length}
-              </span>
-            </button>
-
-
-            <button
-              onClick={() => setActiveTab('FINANCE')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0.75rem 0.85rem',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: activeTab === 'FINANCE' ? '#1E293B' : 'transparent',
-                color: activeTab === 'FINANCE' ? '#F59E0B' : '#94A3B8',
-                fontWeight: activeTab === 'FINANCE' ? 700 : 500,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <CreditCard size={18} />
-                Finance & Revenue
-              </div>
-              <span style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#34D399', padding: '0.15rem 0.45rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700 }}>
-                NPR
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('SYSTEM')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0.75rem 0.85rem',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: activeTab === 'SYSTEM' ? '#1E293B' : 'transparent',
-                color: activeTab === 'SYSTEM' ? '#F59E0B' : '#94A3B8',
-                fontWeight: activeTab === 'SYSTEM' ? 700 : 500,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <Settings size={18} />
-                System & Database
-              </div>
-            </button>
-
+                  {/* Dot indicator on collapsed mode if alert badge */}
+                  {sidebarCollapsed && item.isAlert && (
+                    <span style={{
+                      position: 'absolute',
+                      top: '6px',
+                      right: '12px',
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      backgroundColor: '#D97706',
+                      border: '1.5px solid #0F1E36'
+                    }} />
+                  )}
+                </button>
+              );
+            })}
           </nav>
         </div>
 
         {/* Sidebar Footer */}
-        <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <div style={{ fontSize: '0.8rem', color: '#94A3B8' }}>
-            Logged in: <strong style={{ color: '#F8FAFC' }}>{admin?.displayName || admin?.email || 'Branch Admin'}</strong>
-          </div>
+        <div style={{
+          borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+          paddingTop: '1rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.75rem'
+        }}>
+          {!sidebarCollapsed && (
+            <div style={{ fontSize: '0.8rem', color: '#94A3B8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              Logged in: <strong style={{ color: '#F8FAFC' }}>{admin?.displayName || admin?.email || 'Branch Admin'}</strong>
+            </div>
+          )}
 
           <Link
             to="/"
+            title="Public Site"
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '0.35rem',
+              gap: sidebarCollapsed ? 0 : '0.35rem',
               padding: '0.55rem',
               borderRadius: '6px',
               backgroundColor: 'rgba(255, 255, 255, 0.05)',
               color: '#CBD5E1',
               fontSize: '0.8rem',
               textDecoration: 'none',
-              fontWeight: 500
+              fontWeight: 500,
+              transition: 'background-color 0.15s ease'
             }}
           >
-            <ArrowLeft size={13} /> Public Site
+            <ArrowLeft size={sidebarCollapsed ? 18 : 13} />
+            {!sidebarCollapsed && <span>Public Site</span>}
           </Link>
         </div>
       </aside>
 
       {/* ==================== MAIN CONTENT AREA ==================== */}
-      <main style={{ flex: 1, padding: '2rem 2.5rem', overflowY: 'auto' }}>
+      <main className="admin-main-content">
 
         {/* TOP STATUS BAR */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
