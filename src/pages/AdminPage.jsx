@@ -11,6 +11,8 @@ import {
   Compass, DoorOpen, Bookmark
 } from 'lucide-react';
 import { seedAllCollectionsToFirestore } from '../services/firebase/seedService';
+import { deleteUser as deleteUserFromFirestore, purgeAllUsersFromFirestore } from '../services/firebase/userService';
+import { deleteBooking as deleteBookingFromFirestore, purgeAllBookingsFromFirestore } from '../services/firebase/bookingService';
 import { WalkinStudentModal } from '../components/admin/WalkinStudentModal';
 import { RegistrationReceiptModal } from '../components/admin/RegistrationReceiptModal';
 import { StudyRoomFloorPlan } from '../components/admin/StudyRoomFloorPlan';
@@ -46,6 +48,7 @@ export const AdminPage = () => {
   const [userDueFilter, setUserDueFilter] = useState('ALL'); // ALL | HAS_DUE | NO_DUE
   const [financeStatusFilter, setFinanceStatusFilter] = useState('ALL');
   const [bookingStatusFilter, setBookingStatusFilter] = useState('ALL');
+  const [bookingChannelFilter, setBookingChannelFilter] = useState('WEBSITE_ONLY');
 
   // Modal States
   const [selectedUserForProfile, setSelectedUserForProfile] = useState(null);
@@ -98,6 +101,10 @@ export const AdminPage = () => {
   const [showCabinStudentModal, setShowCabinStudentModal] = useState(false);
   const [selectedLockerForModal, setSelectedLockerForModal] = useState(null);
   const [showLockerModal, setShowLockerModal] = useState(false);
+
+  // Overview Table
+  const [showPastScholars, setShowPastScholars] = useState(false);
+  const [autoExpiredProcessed, setAutoExpiredProcessed] = useState(false);
 
   // Manage Desk / Station Modal State
   const [showSeatModal, setShowSeatModal] = useState(false);
@@ -231,6 +238,35 @@ export const AdminPage = () => {
     }
   };
 
+  const handleResetAndStartFresh = async () => {
+    if (!window.confirm('⚠️ Are you sure you want to remove current student bookings and reset to a clean database? This will clear stale records and initialize pristine state.')) return;
+    setIsSeeding(true);
+    try {
+      ['v1', 'v2', 'v3'].forEach(v => {
+        localStorage.removeItem(`quietdesk_users_${v}`);
+        localStorage.removeItem(`quietdesk_bookings_${v}`);
+        localStorage.removeItem(`quietdesk_lockers_${v}`);
+        localStorage.removeItem(`quietdesk_seats_${v}`);
+      });
+      localStorage.setItem('quietdesk_users_v3', JSON.stringify([]));
+      localStorage.setItem('quietdesk_bookings_v3', JSON.stringify([]));
+      
+      const result = await seedAllCollectionsToFirestore();
+      if (result.success) {
+        setSeedingStatus('✅ Successfully reset and initialized clean database! Reloading workspace...');
+        setTimeout(() => {
+          window.location.reload();
+        }, 1200);
+      } else {
+        setSeedingStatus(`❌ Reset failed: ${result.error}`);
+        setIsSeeding(false);
+      }
+    } catch (err) {
+      setSeedingStatus(`❌ Error during reset: ${err.message}`);
+      setIsSeeding(false);
+    }
+  };
+
   // Real-time Dynamic Fee Calculation Helper
   const calculateFee = ({ passType = 'DAILY', hasLocker = false, seatId = null }) => {
     let basePrice = 350;
@@ -343,8 +379,8 @@ export const AdminPage = () => {
     }
   };
 
-  const handleAdminReservationSubmit = async (e) => {
-    e.preventDefault();
+  const handleAdminReservationSubmit = async (e, mode = 'CONFIRMED') => {
+    if (e && e.preventDefault) e.preventDefault();
     try {
       const selectedSeatObj = seats.find(s => s.id === reservationForm.seatId);
       const feeInfo = calculateFee({
@@ -370,11 +406,31 @@ export const AdminPage = () => {
         paymentStatus = 'PENDING';
       }
 
+      // Check if user already has an active booking on a different seat
+      const todayStr = new Date().toISOString().split('T')[0];
+      const dupBooking = (bookings || []).find(b => {
+        if (['CANCELLED', 'COMPLETED'].includes(b.status)) return false;
+        if (b.endDate && b.endDate < todayStr) return false;
+        if (reservationForm.seatId && b.seatId === reservationForm.seatId) return false;
+        const matchesUser = (reservationForm.userId && b.userId === reservationForm.userId) ||
+                            (reservationForm.userPhone && b.userPhone && b.userPhone.replace(/\D/g, '') === (reservationForm.userPhone || '').replace(/\D/g, '')) ||
+                            (reservationForm.userEmail && b.userEmail && (reservationForm.userEmail || '').trim() && b.userEmail.toLowerCase() === (reservationForm.userEmail || '').toLowerCase());
+        return matchesUser;
+      });
+
+      if (dupBooking) {
+        alert(`⚠️ Scholar "${dupBooking.userName || reservationForm.userName}" already holds an active desk (Desk ${dupBooking.seatNumber}, valid until ${dupBooking.endDate || 'active'}). A student cannot hold multiple active desks simultaneously.`);
+        return;
+      }
+
+      const bookingStatus = mode === 'BOOK' ? 'CONFIRMED' : (mode === 'RESERVE' ? 'RESERVED' : (reservationForm.status || 'CONFIRMED'));
+      const seatStatus = bookingStatus === 'CONFIRMED' ? 'OCCUPIED' : 'RESERVED';
+
       await createBooking({
         ...reservationForm,
         seatNumber: selectedSeatObj ? selectedSeatObj.seatNumber : reservationForm.seatNumber,
         bookingCode: `QD-MAN-${Math.floor(1000 + Math.random() * 9000)}`,
-        status: reservationForm.status || 'CONFIRMED',
+        status: bookingStatus,
         totalAmount,
         advanceAmount,
         amountPaid,
@@ -383,7 +439,7 @@ export const AdminPage = () => {
         createdAt: new Date().toISOString()
       });
       if (reservationForm.seatId) {
-        await changeSeatStatus(reservationForm.seatId, 'RESERVED');
+        await changeSeatStatus(reservationForm.seatId, seatStatus);
       }
       setShowReservationModal(false);
       setReservationForm({
@@ -393,10 +449,10 @@ export const AdminPage = () => {
         endDate: new Date().toISOString().split('T')[0], totalAmount: 350,
         advanceAmount: 0, amountPaid: 0, pendingAmount: 350, paymentStatus: 'PAID', hasLocker: false
       });
-      alert('Manual reservation created and confirmed!');
+      alert(bookingStatus === 'CONFIRMED' ? '✅ Cabin successfully booked and occupied!' : '✅ Reservation successfully created and placed on hold!');
     } catch (err) {
-      console.error('Error creating reservation:', err);
-      alert('Failed to create reservation: ' + err.message);
+      console.error('Error creating booking/reservation:', err);
+      alert('Error: ' + err.message);
     }
   };
 
@@ -730,13 +786,59 @@ export const AdminPage = () => {
 
   if (!isAuthenticated) return null;
 
+  // --- Auto-Expiry: Free cabin and mark scholar inactive when booking endDate passes ---
+  // (Run once when bookings load; safe to call since changeSeatStatus is idempotent)
+  if (!autoExpiredProcessed && bookings.length > 0 && seats.length > 0) {
+    const todayCheck = new Date();
+    todayCheck.setHours(0, 0, 0, 0);
+    const todayCheckStr = todayCheck.toISOString().split('T')[0];
+
+    bookings.forEach(b => {
+      if (!b.endDate) return;
+      const endD = new Date(b.endDate);
+      endD.setHours(0, 0, 0, 0);
+      const isExpired = endD < todayCheck;
+      const isActive = ['CHECKED_IN', 'OCCUPIED', 'CONFIRMED', 'RESERVED'].includes(b.status);
+      if (isExpired && isActive) {
+        // Free the seat
+        const seat = seats.find(s => s.id === b.seatId || s.seatNumber === b.seatNumber);
+        if (seat && seat.status !== 'AVAILABLE') {
+          changeSeatStatus(seat.id, 'AVAILABLE').catch(() => {});
+        }
+        // Mark booking completed
+        changeBookingStatus(b.id, 'COMPLETED').catch(() => {});
+        
+        // Mark user inactive ONLY if they have no other active bookings
+        const hasOtherActive = bookings.some(other =>
+          other.id !== b.id &&
+          (other.userId === b.userId || (other.userPhone && b.userPhone && other.userPhone.replace(/\D/g, '') === b.userPhone.replace(/\D/g, ''))) &&
+          !['CANCELLED', 'COMPLETED'].includes(other.status) &&
+          (!other.endDate || other.endDate >= todayCheckStr)
+        );
+
+        if (!hasOtherActive && b.userId) {
+          updateUser(b.userId, { membershipStatus: 'INACTIVE', status: 'INACTIVE' }).catch(() => {});
+        }
+      }
+    });
+    setAutoExpiredProcessed(true);
+  }
+
   // --- Seat Metrics ---
   const totalSeats = seats.length;
   const occupiedCount = seats.filter(s => s.status === 'OCCUPIED').length;
   const availableCount = seats.filter(s => s.status === 'AVAILABLE').length;
   const reservedCount = seats.filter(s => s.status === 'RESERVED').length;
   const maintenanceCount = seats.filter(s => s.status === 'MAINTENANCE').length;
-  const occupancyRate = totalSeats > 0 ? Math.round((occupiedCount / totalSeats) * 100) : 0;
+  // True occupancy = (occupied + reserved) / total
+  const bookedSeats = occupiedCount + reservedCount;
+  const occupancyRate = totalSeats > 0 ? Math.round((bookedSeats / totalSeats) * 100) : 0;
+  const occupancyRateExact = totalSeats > 0 ? ((bookedSeats / totalSeats) * 100).toFixed(1) : '0.0';
+
+  // --- Locker Metrics ---
+  const totalLockers = lockers ? lockers.length : 0;
+  const bookedLockers = lockers ? lockers.filter(l => l.status === 'ASSIGNED' || l.status === 'OCCUPIED').length : 0;
+  const availableLockers = totalLockers - bookedLockers;
 
   // --- Booking Metrics ---
   const pendingConfirmations = bookings.filter(b => b.status === 'PENDING_CONFIRMATION');
@@ -779,7 +881,17 @@ export const AdminPage = () => {
     return matchesZone && matchesStatus;
   });
 
+  const isWebsiteBooking = (b) => {
+    if (b.bookingType === 'WEBSITE_BOOKING' || b.bookingType === 'WEBSITE') return true;
+    if (b.bookingType === 'PHYSICAL_WALKIN' || b.bookingType === 'ADMIN_MANUAL' || b.bookingType === 'MANUAL_MAP') return false;
+    if (b.bookingCode && (b.bookingCode.startsWith('QD-MAN') || b.bookingCode.startsWith('QD-WALK') || b.bookingCode.startsWith('QD-MAP'))) return false;
+    return true;
+  };
+
   const filteredBookings = bookings.filter(b => {
+    const isOnline = isWebsiteBooking(b);
+    if (bookingChannelFilter === 'WEBSITE_ONLY' && !isOnline) return false;
+    if (bookingChannelFilter === 'WALKIN_ONLY' && isOnline) return false;
     const matchesQuery = (b.bookingCode && b.bookingCode.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (b.userName && b.userName.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (b.seatNumber && b.seatNumber.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -795,25 +907,108 @@ export const AdminPage = () => {
     return matchesQuery && matchesPayment;
   });
 
+  // --- Unified User Registry (Includes Admin registered users + Website booked students) ---
+  const allUnifiedUsers = useMemo(() => {
+    const userMap = new Map();
+    // 1. Add all users from the users collection
+    (users || []).forEach(u => {
+      if (!u || !u.id) return;
+      userMap.set(u.id, { ...u, source: 'REGISTERED' });
+    });
+
+    // 2. Also ensure any student who has a booking in the bookings collection is unified
+    (bookings || []).forEach(b => {
+      if (!b) return;
+      const bUserId = b.userId;
+      const phoneClean = (b.userPhone || '').replace(/\D/g, '');
+      const emailClean = (b.userEmail || '').toLowerCase().trim();
+
+      let foundKey = null;
+      for (const [key, val] of userMap.entries()) {
+        const valPhone = (val.phone || '').replace(/\D/g, '');
+        const valEmail = (val.email || '').toLowerCase().trim();
+        if (key === bUserId || (phoneClean && valPhone === phoneClean) || (emailClean && valEmail === emailClean)) {
+          foundKey = key;
+          break;
+        }
+      }
+
+      if (foundKey) {
+        const existing = userMap.get(foundKey);
+        userMap.set(foundKey, {
+          ...existing,
+          assignedSeat: b.seatNumber ? `Desk ${b.seatNumber}` : existing.assignedSeat,
+          seatNumber: b.seatNumber || existing.seatNumber,
+          passType: b.passType || existing.passType
+        });
+      } else {
+        const autoId = bUserId || `usr_bk_${b.id}`;
+        userMap.set(autoId, {
+          id: autoId,
+          userCode: b.userCode || `QD-STU-${Math.floor(1000 + Math.random() * 9000)}`,
+          fullName: b.userName || 'Scholar',
+          name: b.userName || 'Scholar',
+          email: b.userEmail || '',
+          phone: b.userPhone || '',
+          passType: b.passType || 'DAILY',
+          assignedSeat: b.seatNumber ? `Desk ${b.seatNumber}` : '',
+          seatNumber: b.seatNumber || '',
+          joinedDate: b.startDate || b.createdAt || new Date().toISOString(),
+          membershipStatus: 'ACTIVE',
+          status: 'ACTIVE',
+          source: 'WEBSITE_BOOKING'
+        });
+      }
+    });
+
+    return Array.from(userMap.values());
+  }, [users, bookings]);
+
   // --- Dashboard Computed: Unpaid / Partial Payments ---
   const unpaidBookings = bookings.filter(b => b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID');
   const partialBookings = bookings.filter(b => b.status !== 'CANCELLED' && b.paymentStatus === 'PARTIAL');
   const pendingOnlyBookings = bookings.filter(b => b.status !== 'CANCELLED' && b.paymentStatus === 'PENDING');
 
   // --- Dashboard Computed: Session Expiry ---
-  // Calculate days remaining until booking endDate, sorted by soonest first
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const sessionExpiryList = bookings
-    .filter(b => b.status !== 'CANCELLED' && b.endDate)
+
+  // All bookings with days-remaining computed (Timezone-Safe)
+  const parseLocalMidnight = (dateStr) => {
+    if (!dateStr) return new Date();
+    const parts = dateStr.split('T')[0].split('-');
+    if (parts.length < 3) return new Date();
+    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 0, 0, 0, 0);
+  };
+
+  const allBookingsWithDays = bookings
+    .filter(b => b.endDate)
     .map(b => {
-      const end = new Date(b.endDate);
-      end.setHours(0, 0, 0, 0);
-      const daysLeft = Math.round((end - today) / (1000 * 60 * 60 * 24));
+      const end = parseLocalMidnight(b.endDate);
+      const daysLeft = Math.round((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
       return { ...b, daysLeft };
+    });
+
+  // Active scholars (not cancelled/completed, end date today or future)
+  const sessionExpiryList = allBookingsWithDays
+    .filter(b => !['CANCELLED', 'COMPLETED'].includes(b.status) && b.daysLeft >= 0)
+    .sort((a, b) => a.daysLeft - b.daysLeft);
+
+  // Past scholars (end date in the past OR status COMPLETED)
+  const pastScholarsList = allBookingsWithDays
+    .filter(b => b.daysLeft < 0 || b.status === 'COMPLETED')
+    .sort((a, b) => b.daysLeft - a.daysLeft); // most recently expired first
+
+  // Active scholars table: expiring ≤3 days pinned first, then by soonest
+  const activeScholarsTable = [
+    ...sessionExpiryList.filter(b => b.daysLeft <= 3),
+    ...sessionExpiryList.filter(b => b.daysLeft > 3).sort((a, b) => {
+      // Sort by most recently booked (createdAt desc) among non-urgent
+      const aDate = a.createdAt ? new Date(a.createdAt) : new Date(0);
+      const bDate = b.createdAt ? new Date(b.createdAt) : new Date(0);
+      return bDate - aDate;
     })
-    .filter(b => b.daysLeft >= 0) // active or expiring
-    .sort((a, b) => a.daysLeft - b.daysLeft); // soonest first
+  ];
 
   // Max days to use as bar scale (cap at 30 days for readability)
   const maxDisplayDays = 30;
@@ -1101,12 +1296,12 @@ export const AdminPage = () => {
             {activeTab !== 'DESKS' && (
               <>
                 <button
-                  onClick={() => setShowRegisterUserModal(true)}
+                  onClick={() => setShowWalkinStudentModal(true)}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '0.4rem',
-                    backgroundColor: '#0F172A',
+                    backgroundColor: '#059669',
                     color: '#FFFFFF',
                     border: 'none',
                     padding: '0.55rem 1rem',
@@ -1116,7 +1311,7 @@ export const AdminPage = () => {
                     cursor: 'pointer'
                   }}
                 >
-                  <UserPlus size={16} /> + Register New User
+                  <CheckCircle2 size={16} /> 🟢 Book Cabin (Walk-in)
                 </button>
 
                 <button
@@ -1135,7 +1330,26 @@ export const AdminPage = () => {
                     cursor: 'pointer'
                   }}
                 >
-                  <Plus size={16} /> Make Reservation
+                  <Plus size={16} /> 🟡 Make Reservation
+                </button>
+
+                <button
+                  onClick={() => setShowRegisterUserModal(true)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    backgroundColor: '#0F172A',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    padding: '0.55rem 1rem',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <UserPlus size={16} /> + Register User
                 </button>
               </>
             )}
@@ -1150,31 +1364,55 @@ export const AdminPage = () => {
         {/* ==================== TAB 1: OVERVIEW ==================== */}
         {activeTab === 'OVERVIEW' && (
           <div>
-            {/* KPI Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
-              
+
+            {/* ── KPI Cards Row (5 cards) ── */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+
+              {/* 1. Available Stations */}
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Available Stations</div>
-                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#059669', margin: '0.3rem 0' }}>{availableCount} / {totalSeats}</div>
-                <div style={{ fontSize: '0.8rem', color: '#475569' }}>{totalSeats - availableCount} currently occupied or reserved</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>🟢 Available Stations</div>
+                <div style={{ fontSize: '1.9rem', fontWeight: 800, color: '#059669', margin: '0.25rem 0 0.1rem' }}>{availableCount}<span style={{ fontSize: '1rem', color: '#94A3B8', fontWeight: 600 }}> / {totalSeats}</span></div>
+                <div style={{ fontSize: '0.75rem', color: '#475569' }}>{bookedSeats} occupied or reserved</div>
               </div>
 
+              {/* 2. Occupancy Rate — fixed math */}
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Occupancy Rate</div>
-                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#D97706', margin: '0.3rem 0' }}>{occupancyRate}%</div>
-                <div style={{ fontSize: '0.8rem', color: '#475569' }}>{occupiedCount} active check-ins</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>📊 Occupancy Rate</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.35rem', margin: '0.25rem 0 0.1rem' }}>
+                  <div style={{ fontSize: '1.9rem', fontWeight: 800, color: '#D97706' }}>{occupancyRateExact}%</div>
+                </div>
+                <div style={{ height: '4px', borderRadius: '4px', backgroundColor: '#F1F5F9', overflow: 'hidden', marginBottom: '0.3rem' }}>
+                  <div style={{ height: '100%', width: `${occupancyRate}%`, backgroundColor: occupancyRate > 80 ? '#DC2626' : occupancyRate > 50 ? '#D97706' : '#059669', borderRadius: '4px', transition: 'width 0.4s ease' }} />
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#475569' }}>{occupiedCount} occupied · {reservedCount} reserved · {totalSeats} total</div>
               </div>
 
+              {/* 3. Locker Utilization — NEW */}
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Pending Confirmations</div>
-                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#2563EB', margin: '0.3rem 0' }}>{pendingConfirmations.length}</div>
-                <div style={{ fontSize: '0.8rem', color: '#475569' }}>User reservations awaiting admin confirmation</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>🔑 Locker Utilization</div>
+                <div style={{ fontSize: '1.9rem', fontWeight: 800, color: availableLockers === 0 ? '#DC2626' : '#1D4ED8', margin: '0.25rem 0 0.1rem' }}>
+                  {bookedLockers}<span style={{ fontSize: '1rem', color: '#94A3B8', fontWeight: 600 }}> / {totalLockers}</span>
+                </div>
+                <div style={{ height: '4px', borderRadius: '4px', backgroundColor: '#F1F5F9', overflow: 'hidden', marginBottom: '0.3rem' }}>
+                  <div style={{ height: '100%', width: totalLockers > 0 ? `${Math.round((bookedLockers / totalLockers) * 100)}%` : '0%', backgroundColor: availableLockers === 0 ? '#DC2626' : availableLockers <= 3 ? '#D97706' : '#2563EB', borderRadius: '4px' }} />
+                </div>
+                <div style={{ fontSize: '0.72rem', color: availableLockers === 0 ? '#DC2626' : '#059669', fontWeight: 600 }}>
+                  {availableLockers === 0 ? '🔴 All lockers assigned' : `${availableLockers} key locker${availableLockers !== 1 ? 's' : ''} free`}
+                </div>
               </div>
 
+              {/* 4. Pending Confirmations */}
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Total Revenue</div>
-                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#0F172A', margin: '0.3rem 0' }}>NPR {totalGrossRevenue.toLocaleString()}</div>
-                <div style={{ fontSize: '0.8rem', color: '#059669', fontWeight: 600 }}>NPR {collectedPaidRevenue.toLocaleString()} paid in full</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>⏳ Pending Confirmations</div>
+                <div style={{ fontSize: '1.9rem', fontWeight: 800, color: pendingConfirmations.length > 0 ? '#2563EB' : '#94A3B8', margin: '0.25rem 0 0.1rem' }}>{pendingConfirmations.length}</div>
+                <div style={{ fontSize: '0.72rem', color: '#475569' }}>Reservations awaiting admin confirm</div>
+              </div>
+
+              {/* 5. Total Revenue */}
+              <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>💰 Total Revenue</div>
+                <div style={{ fontSize: '1.55rem', fontWeight: 800, color: '#0F172A', margin: '0.25rem 0 0.1rem' }}>NPR {totalGrossRevenue.toLocaleString()}</div>
+                <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 600 }}>NPR {collectedPaidRevenue.toLocaleString()} collected</div>
               </div>
 
             </div>
@@ -1186,7 +1424,7 @@ export const AdminPage = () => {
                 border: '1px solid #BFDBFE',
                 borderRadius: '12px',
                 padding: '1.25rem 1.5rem',
-                marginBottom: '2rem',
+                marginBottom: '1.5rem',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
@@ -1222,34 +1460,186 @@ export const AdminPage = () => {
               </div>
             )}
 
-            {/* Main 2-Column Grid: Left (desk grid) | Right (payment + expiry cards) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.5rem', alignItems: 'start' }}>
-
-              {/* LEFT: Quick Desk Overview Grid */}
-              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Live Desk Status Grid Highlights</h3>
+            {/* ── PROMOTED: Sessions Expiring Soon (full-width card) ── */}
+            {sessionExpiryList.filter(b => b.daysLeft <= 7).length > 0 && (
+              <div style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: '12px',
+                border: '1px solid #FCA5A5',
+                marginBottom: '1.5rem',
+                overflow: 'hidden',
+                boxShadow: '0 2px 8px rgba(220,38,38,0.07)'
+              }}>
+                <div style={{ padding: '1rem 1.5rem', background: 'linear-gradient(90deg,#FEF2F2,#FFF7F7)', borderBottom: '1px solid #FECACA', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <span style={{ fontSize: '1.2rem' }}>⏰</span>
+                    <div>
+                      <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#B91C1C' }}>Sessions Expiring Soon</div>
+                      <div style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: '0.05rem' }}>{sessionExpiryList.filter(b => b.daysLeft <= 7).length} scholar{sessionExpiryList.filter(b => b.daysLeft <= 7).length !== 1 ? 's' : ''} need attention</div>
+                    </div>
+                  </div>
                   <button
-                    onClick={() => setActiveTab('DESKS')}
-                    style={{ background: 'none', border: 'none', color: '#2563EB', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+                    onClick={() => setShowSessionExpiryPopup(true)}
+                    style={{ padding: '0.3rem 0.8rem', borderRadius: '6px', border: 'none', backgroundColor: '#0F172A', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
                   >
-                    Open Full Desk Manager →
+                    View All →
                   </button>
                 </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(65px, 1fr))', gap: '0.5rem' }}>
-                  {seats.slice(0, 36).map(seat => {
-                    let bgColor = '#F1F5F9', textColor = '#475569', borderColor = '#CBD5E1';
-                    if (seat.status === 'AVAILABLE') { bgColor = '#ECFDF5'; textColor = '#047857'; borderColor = '#A7F3D0'; }
-                    else if (seat.status === 'OCCUPIED') { bgColor = '#FEF2F2'; textColor = '#B91C1C'; borderColor = '#FECACA'; }
-                    else if (seat.status === 'RESERVED') { bgColor = '#FEF3C7'; textColor = '#B45309'; borderColor = '#FDE68A'; }
-                    else if (seat.status === 'MAINTENANCE') { bgColor = '#F3F4F6'; textColor = '#6B7280'; borderColor = '#D1D5DB'; }
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 0, padding: '0.25rem 0' }}>
+                  {sessionExpiryList.filter(b => b.daysLeft <= 7).slice(0, 8).map(b => {
+                    const isUrgent = b.daysLeft <= 2;
+                    const isToday = b.daysLeft === 0;
+                    const barPct = Math.min(100, Math.round((b.daysLeft / 7) * 100));
+                    const barColor = isToday || isUrgent ? '#DC2626' : '#D97706';
+                    const textColor = isToday || isUrgent ? '#DC2626' : '#B45309';
+                    const bgBadge = isToday || isUrgent ? '#FEF2F2' : '#FFFBEB';
                     return (
-                      <div key={seat.id} style={{ backgroundColor: bgColor, color: textColor, border: `1px solid ${borderColor}`, borderRadius: '6px', padding: '0.4rem', textAlign: 'center', fontSize: '0.75rem', fontWeight: 700 }}>
-                        {seat.seatNumber}
+                      <div key={b.id} style={{ padding: '0.8rem 1.25rem', borderBottom: '1px solid #F9FAFB' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: isUrgent ? '#FEE2E2' : '#FFFBEB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 800, color: textColor, flexShrink: 0 }}>
+                              {(b.userName || 'U').charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0F172A', lineHeight: 1.2 }}>{b.userName || 'Walk-in'}</div>
+                              <div style={{ fontSize: '0.65rem', color: '#94A3B8' }}>{b.passType} · Desk {b.seatNumber}</div>
+                            </div>
+                          </div>
+                          <span style={{ fontSize: '0.7rem', fontWeight: 800, color: textColor, backgroundColor: bgBadge, padding: '0.15rem 0.5rem', borderRadius: '10px', whiteSpace: 'nowrap' }}>
+                            {isToday ? '⚠ Expires Today' : `${b.daysLeft}d left`}
+                          </span>
+                        </div>
+                        <div style={{ height: '4px', borderRadius: '4px', backgroundColor: '#F1F5F9', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${barPct}%`, backgroundColor: barColor, borderRadius: '4px', transition: 'width 0.3s ease' }} />
+                        </div>
+                        <div style={{ fontSize: '0.65rem', color: '#94A3B8', marginTop: '0.2rem' }}>Expires: {b.endDate}</div>
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            )}
+
+            {/* Main 2-Column Grid: Left (scholar table) | Right (payment + desk grid) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.5rem', alignItems: 'start' }}>
+
+              {/* LEFT: Active Scholars Table */}
+              <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+                {/* Header */}
+                <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                  <div>
+                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A' }}>👥 Scholar Register</div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '0.1rem' }}>
+                      {activeScholarsTable.length} active · {pastScholarsList.length} past
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    {/* Past Scholars Toggle */}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: '#475569' }}>
+                      <div
+                        onClick={() => setShowPastScholars(p => !p)}
+                        style={{
+                          width: '34px', height: '18px', borderRadius: '9px', position: 'relative', cursor: 'pointer',
+                          backgroundColor: showPastScholars ? '#6D28D9' : '#CBD5E1', transition: 'background 0.2s'
+                        }}
+                      >
+                        <div style={{
+                          position: 'absolute', top: '2px',
+                          left: showPastScholars ? '18px' : '2px',
+                          width: '14px', height: '14px', borderRadius: '50%',
+                          backgroundColor: '#FFFFFF', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                        }} />
+                      </div>
+                      Show Past
+                    </label>
+                    <button
+                      onClick={() => setActiveTab('USERS')}
+                      style={{ background: 'none', border: 'none', color: '#2563EB', fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    >View All Users →</button>
+                  </div>
+                </div>
+
+                {/* Table */}
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                        <th style={{ padding: '0.65rem 1rem', textAlign: 'left', fontWeight: 700, color: '#475569', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>Scholar</th>
+                        <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', fontWeight: 700, color: '#475569', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Desk</th>
+                        <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', fontWeight: 700, color: '#475569', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Locker</th>
+                        <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', fontWeight: 700, color: '#475569', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Pass</th>
+                        <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', fontWeight: 700, color: '#475569', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Expires</th>
+                        <th style={{ padding: '0.65rem 0.75rem', textAlign: 'center', fontWeight: 700, color: '#475569', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeScholarsTable.length === 0 && !showPastScholars ? (
+                        <tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#94A3B8', fontSize: '0.85rem' }}>No active scholars</td></tr>
+                      ) : (
+                        [...activeScholarsTable, ...(showPastScholars ? pastScholarsList : [])].map((b, idx) => {
+                          const isPast = b.daysLeft < 0 || b.status === 'COMPLETED';
+                          const isUrgent = !isPast && b.daysLeft <= 3;
+                          const isWarning = !isPast && b.daysLeft > 3 && b.daysLeft <= 7;
+
+                          let statusBg = '#ECFDF5', statusColor = '#047857', statusLabel = `${b.daysLeft}d left`;
+                          if (isPast) { statusBg = '#F1F5F9'; statusColor = '#64748B'; statusLabel = 'Expired'; }
+                          else if (b.daysLeft === 0) { statusBg = '#FEF2F2'; statusColor = '#B91C1C'; statusLabel = '⚠ Today'; }
+                          else if (isUrgent) { statusBg = '#FEF2F2'; statusColor = '#B91C1C'; statusLabel = `🔴 ${b.daysLeft}d left`; }
+                          else if (isWarning) { statusBg = '#FFFBEB'; statusColor = '#B45309'; statusLabel = `🟡 ${b.daysLeft}d left`; }
+                          else { statusLabel = `🟢 ${b.daysLeft}d left`; }
+
+                          const rowBg = isPast ? '#FAFAFA' : (isUrgent ? '#FFF8F8' : isWarning ? '#FFFEF5' : '#FFFFFF');
+                          const passColors = {
+                            MONTHLY: { bg: '#EDE9FE', color: '#6D28D9' },
+                            WEEKLY: { bg: '#DBEAFE', color: '#1D4ED8' },
+                            DAILY: { bg: '#F3F4F6', color: '#374151' }
+                          };
+                          const passStyle = passColors[b.passType] || passColors.DAILY;
+                          const lockerDisplay = b.hasLocker ? (b.lockerNumber || b.lockerLabel || '—') : '—';
+
+                          return (
+                            <tr
+                              key={b.id + idx}
+                              style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: rowBg, opacity: isPast ? 0.7 : 1 }}
+                            >
+                              <td style={{ padding: '0.7rem 1rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: isPast ? '#E2E8F0' : '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 800, color: isPast ? '#64748B' : '#F8FAFC', flexShrink: 0 }}>
+                                    {(b.userName || 'U').charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '0.82rem', lineHeight: 1.2 }}>{b.userName || 'Walk-in'}</div>
+                                    <div style={{ fontSize: '0.68rem', color: '#94A3B8' }}>{b.userPhone || b.bookingCode || ''}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center' }}>
+                                <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#0F172A' }}>{b.seatNumber || '—'}</span>
+                              </td>
+                              <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center' }}>
+                                {b.hasLocker ? (
+                                  <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '0.15rem 0.45rem', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700 }}>🔑 {lockerDisplay}</span>
+                                ) : (
+                                  <span style={{ color: '#CBD5E1', fontSize: '0.75rem' }}>—</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center' }}>
+                                <span style={{ backgroundColor: passStyle.bg, color: passStyle.color, padding: '0.15rem 0.45rem', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700 }}>{b.passType}</span>
+                              </td>
+                              <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center', fontSize: '0.75rem', color: '#475569', whiteSpace: 'nowrap' }}>
+                                {b.endDate || '—'}
+                              </td>
+                              <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center' }}>
+                                <span style={{ backgroundColor: statusBg, color: statusColor, padding: '0.2rem 0.5rem', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 800, whiteSpace: 'nowrap' }}>
+                                  {statusLabel}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
@@ -1295,52 +1685,56 @@ export const AdminPage = () => {
                   </div>
                 </div>
 
-                {/* ── Card 2: Sessions Expiring ── */}
-                <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
-                  {/* Card Header */}
-                  <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '0.04em' }}>⏰ Sessions Expiring Soon</div>
-                      <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '0.1rem' }}>{sessionExpiryList.slice(0, 7).length} of {sessionExpiryList.length} shown</div>
-                    </div>
+                {/* ── Card 2: Live Desk Grid with Legend ── */}
+                <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                    <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0F172A' }}>📋 Live Desk Grid</div>
                     <button
-                      onClick={() => setShowSessionExpiryPopup(true)}
-                      style={{ padding: '0.3rem 0.7rem', borderRadius: '6px', border: 'none', backgroundColor: '#0F172A', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
-                    >
-                      View All →
-                    </button>
+                      onClick={() => setActiveTab('DESKS')}
+                      style={{ background: 'none', border: 'none', color: '#2563EB', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
+                    >Full View →</button>
                   </div>
 
-                  {/* Session rows with progress bar */}
-                  <div style={{ padding: '0.5rem 0' }}>
-                    {sessionExpiryList.length === 0 ? (
-                      <div style={{ padding: '1rem 1.25rem', fontSize: '0.82rem', color: '#64748B', textAlign: 'center' }}>No active sessions tracked</div>
-                    ) : sessionExpiryList.slice(0, 7).map(b => {
-                      const pct = Math.min(100, Math.round((b.daysLeft / Math.max(b.daysLeft, maxDisplayDays)) * 100));
-                      const isUrgent = b.daysLeft <= 2;
-                      const isWarning = b.daysLeft <= 7 && !isUrgent;
-                      const barColor = isUrgent ? '#DC2626' : isWarning ? '#D97706' : '#059669';
-                      const textColor = isUrgent ? '#DC2626' : isWarning ? '#B45309' : '#047857';
-                      const bgColor = isUrgent ? '#FEF2F2' : isWarning ? '#FFFBEB' : '#ECFDF5';
+                  {/* Legend */}
+                  <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '0.75rem', padding: '0.5rem 0.6rem', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #F1F5F9' }}>
+                    {[
+                      { color: '#ECFDF5', border: '#A7F3D0', text: '#047857', label: 'Available' },
+                      { color: '#FEF2F2', border: '#FECACA', text: '#B91C1C', label: 'Occupied' },
+                      { color: '#FEF3C7', border: '#FDE68A', text: '#B45309', label: 'Reserved' },
+                      { color: '#F3F4F6', border: '#D1D5DB', text: '#6B7280', label: 'Maintenance' }
+                    ].map(item => (
+                      <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: item.color, border: `1px solid ${item.border}` }} />
+                        <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#475569' }}>{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desk Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(48px, 1fr))', gap: '0.35rem' }}>
+                    {seats.slice(0, 40).map(seat => {
+                      let bgColor = '#F1F5F9', textColor = '#475569', borderColor = '#CBD5E1';
+                      if (seat.status === 'AVAILABLE') { bgColor = '#ECFDF5'; textColor = '#047857'; borderColor = '#A7F3D0'; }
+                      else if (seat.status === 'OCCUPIED') { bgColor = '#FEF2F2'; textColor = '#B91C1C'; borderColor = '#FECACA'; }
+                      else if (seat.status === 'RESERVED') { bgColor = '#FEF3C7'; textColor = '#B45309'; borderColor = '#FDE68A'; }
+                      else if (seat.status === 'MAINTENANCE') { bgColor = '#F3F4F6'; textColor = '#6B7280'; borderColor = '#D1D5DB'; }
                       return (
-                        <div key={b.id} style={{ padding: '0.6rem 1.25rem' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
-                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0F172A', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {b.userName || 'Walk-in Guest'}
-                            </span>
-                            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: textColor, backgroundColor: bgColor, padding: '0.1rem 0.45rem', borderRadius: '10px', whiteSpace: 'nowrap' }}>
-                              {b.daysLeft === 0 ? '⚠ Today' : `${b.daysLeft}d left`}
-                            </span>
-                          </div>
-                          <div style={{ height: '5px', borderRadius: '10px', backgroundColor: '#F1F5F9', overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: `${pct}%`, backgroundColor: barColor, borderRadius: '10px', transition: 'width 0.3s ease' }} />
-                          </div>
-                          <div style={{ fontSize: '0.65rem', color: '#94A3B8', marginTop: '0.2rem' }}>
-                            {b.passType} · Desk {b.seatNumber} · Expires {b.endDate}
-                          </div>
+                        <div key={seat.id} style={{ backgroundColor: bgColor, color: textColor, border: `1px solid ${borderColor}`, borderRadius: '5px', padding: '0.3rem 0.2rem', textAlign: 'center', fontSize: '0.68rem', fontWeight: 700, lineHeight: 1 }}>
+                          {seat.seatNumber}
                         </div>
                       );
                     })}
+                    {seats.length > 40 && (
+                      <div style={{ gridColumn: '1/-1', fontSize: '0.65rem', color: '#94A3B8', textAlign: 'center', paddingTop: '0.3rem' }}>+{seats.length - 40} more desks</div>
+                    )}
+                  </div>
+
+                    {/* Summary row */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', paddingTop: '0.65rem', borderTop: '1px solid #F1F5F9', fontSize: '0.7rem', color: '#64748B', fontWeight: 600 }}>
+                    <span style={{ color: '#047857' }}>🟢 {availableCount} Free</span>
+                    <span style={{ color: '#B91C1C' }}>🔴 {occupiedCount} Busy</span>
+                    <span style={{ color: '#B45309' }}>🟡 {reservedCount} Reserved</span>
+                    <span style={{ color: '#6B7280' }}>⚫ {maintenanceCount} Maint</span>
                   </div>
                 </div>
 
@@ -1414,6 +1808,31 @@ export const AdminPage = () => {
                 >
                   <UserPlus size={16} /> Register New User
                 </button>
+                <button
+                  onClick={async () => {
+                    if (!window.confirm('⚠️ DANGER: This will PERMANENTLY DELETE all users and all bookings from Firestore and local storage. This cannot be undone. Are you absolutely sure?')) return;
+                    if (!window.confirm('Second confirmation: Delete ALL data? This will reset everything to empty.')) return;
+                    await purgeAllUsersFromFirestore();
+                    await purgeAllBookingsFromFirestore();
+                    alert('✅ All users and bookings have been purged. The system is now empty.');
+                  }}
+                  title="Permanently delete all users and bookings from Firestore"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    backgroundColor: '#DC2626',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    padding: '0.55rem 1rem',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Trash2 size={16} /> Purge All Data
+                </button>
               </div>
             </div>
 
@@ -1421,18 +1840,25 @@ export const AdminPage = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Total Registered Users</div>
-                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#0F172A', marginTop: '0.2rem' }}>{users.length}</div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#0F172A', marginTop: '0.2rem' }}>{allUnifiedUsers.length}</div>
               </div>
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Active Pass Holders</div>
                 <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#059669', marginTop: '0.2rem' }}>
-                  {users.filter(u => u.membershipStatus === 'ACTIVE').length}
+                  {allUnifiedUsers.filter(u => {
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    return (bookings || []).some(b => 
+                      (b.userId === u.id || (b.userPhone && u.phone && b.userPhone.replace(/\D/g, '') === u.phone.replace(/\D/g, ''))) &&
+                      !['CANCELLED', 'COMPLETED'].includes(b.status) &&
+                      (!b.endDate || b.endDate >= todayStr)
+                    );
+                  }).length}
                 </div>
               </div>
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Weekly / Monthly Members</div>
                 <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#2563EB', marginTop: '0.2rem' }}>
-                  {users.filter(u => u.passType === 'WEEKLY' || u.passType === 'MONTHLY').length}
+                  {allUnifiedUsers.filter(u => u.passType === 'WEEKLY' || u.passType === 'MONTHLY').length}
                 </div>
               </div>
             </div>
@@ -1452,17 +1878,34 @@ export const AdminPage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {users
+                  {allUnifiedUsers
                     .filter(u => {
+                      const todayStr = new Date().toISOString().split('T')[0];
+                      const hasActiveBooking = (bookings || []).some(b =>
+                        (b.userId === u.id || (b.userPhone && u.phone && b.userPhone.replace(/\D/g, '') === u.phone.replace(/\D/g, ''))) &&
+                        !['CANCELLED', 'COMPLETED'].includes(b.status) &&
+                        (!b.endDate || b.endDate >= todayStr)
+                      );
+                      const effectiveStatus = hasActiveBooking ? 'ACTIVE' : (u.membershipStatus || u.status || 'INACTIVE');
+
                       const q = searchQuery.toLowerCase();
                       const matchesSearch = !q || (u.fullName && u.fullName.toLowerCase().includes(q)) ||
                         (u.email && u.email.toLowerCase().includes(q)) ||
                         (u.phone && u.phone.toLowerCase().includes(q)) ||
                         (u.userCode && u.userCode.toLowerCase().includes(q));
-                      const matchesStatus = userStatusFilter === 'ALL' || u.membershipStatus === userStatusFilter;
+                      const matchesStatus = userStatusFilter === 'ALL' || effectiveStatus === userStatusFilter;
                       return matchesSearch && matchesStatus;
                     })
-                    .map(user => (
+                    .map(user => {
+                      const todayStr = new Date().toISOString().split('T')[0];
+                      const activeBookingForUser = (bookings || []).find(b =>
+                        (b.userId === user.id || (b.userPhone && user.phone && b.userPhone.replace(/\D/g, '') === user.phone.replace(/\D/g, ''))) &&
+                        !['CANCELLED', 'COMPLETED'].includes(b.status) &&
+                        (!b.endDate || b.endDate >= todayStr)
+                      );
+                      const displayStatus = activeBookingForUser ? 'ACTIVE' : (user.membershipStatus || user.status || 'INACTIVE');
+
+                      return (
                       <tr key={user.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
                         <td style={{ padding: '0.85rem 1.25rem', fontWeight: 800, color: '#0F172A' }}>
                           {user.userCode || user.id}
@@ -1497,17 +1940,17 @@ export const AdminPage = () => {
                             borderRadius: '12px',
                             fontSize: '0.75rem',
                             fontWeight: 700,
-                            backgroundColor: user.membershipStatus === 'ACTIVE' ? '#ECFDF5' : '#FEE2E2',
-                            color: user.membershipStatus === 'ACTIVE' ? '#047857' : '#991B1B'
+                            backgroundColor: displayStatus === 'ACTIVE' ? '#ECFDF5' : '#FEE2E2',
+                            color: displayStatus === 'ACTIVE' ? '#047857' : '#991B1B'
                           }}>
-                            {user.membershipStatus}
+                            {displayStatus}
                           </span>
                         </td>
                         <td style={{ padding: '0.85rem 1.25rem', color: '#64748B', fontSize: '0.8rem' }}>
                           {user.joinedDate ? new Date(user.joinedDate).toLocaleDateString() : 'N/A'}
                         </td>
                         <td style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>
-                          <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
+                          <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end', alignItems: 'center' }}>
                             <button
                               onClick={() => setSelectedUserForProfile(user)}
                               style={{
@@ -1526,38 +1969,87 @@ export const AdminPage = () => {
                             >
                               <Eye size={13} /> View Profile
                             </button>
+                            {activeBookingForUser ? (
+                              <button
+                                onClick={() => {
+                                  const targetSeat = seats.find(s => s.seatNumber === activeBookingForUser.seatNumber || s.id === activeBookingForUser.seatId) || { seatNumber: activeBookingForUser.seatNumber, zone: activeBookingForUser.zone || 'Zone A' };
+                                  setSelectedSeatForCabinModal(targetSeat);
+                                  setShowCabinModal(true);
+                                }}
+                                title={`Currently occupying Desk ${activeBookingForUser.seatNumber}`}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem',
+                                  padding: '0.35rem 0.65rem',
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  backgroundColor: '#059669',
+                                  color: '#FFFFFF',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <CheckCircle2 size={13} /> Desk {activeBookingForUser.seatNumber}
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setReservationForm(prev => ({
+                                    ...prev,
+                                    userId: user.id,
+                                    userName: user.fullName,
+                                    userEmail: user.email,
+                                    userPhone: user.phone,
+                                    passType: user.passType || 'DAILY'
+                                  }));
+                                  setShowReservationModal(true);
+                                }}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem',
+                                  padding: '0.35rem 0.65rem',
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  backgroundColor: '#D97706',
+                                  color: '#FFFFFF',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <Plus size={13} /> Assign Desk
+                              </button>
+                            )}
                             <button
-                              onClick={() => {
-                                setReservationForm(prev => ({
-                                  ...prev,
-                                  userId: user.id,
-                                  userName: user.fullName,
-                                  userEmail: user.email,
-                                  userPhone: user.phone,
-                                  passType: user.passType || 'DAILY'
-                                }));
-                                setShowReservationModal(true);
+                              onClick={async () => {
+                                if (!window.confirm(`Delete "${user.fullName || user.id}" from the system? This cannot be undone.`)) return;
+                                await deleteUserFromFirestore(user.id);
                               }}
+                              title="Remove user from database"
                               style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '0.25rem',
-                                padding: '0.35rem 0.65rem',
+                                padding: '0.35rem 0.6rem',
                                 borderRadius: '6px',
-                                border: 'none',
-                                backgroundColor: '#D97706',
-                                color: '#FFFFFF',
+                                border: '1px solid #FCA5A5',
+                                backgroundColor: '#FFF5F5',
+                                color: '#DC2626',
                                 fontSize: '0.75rem',
                                 fontWeight: 700,
                                 cursor: 'pointer'
                               }}
                             >
-                              <Plus size={13} /> Reserve
+                              <Trash2 size={13} />
                             </button>
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -2470,6 +2962,33 @@ export const AdminPage = () => {
                 />
               </div>
 
+              <div style={{ display: 'flex', gap: '0.4rem', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '8px' }}>
+                {[
+                  ['WEBSITE_ONLY', '🌐 Website Online Bookings', '#2563EB'],
+                  ['ALL', '📋 All Channels', '#0F172A'],
+                  ['WALKIN_ONLY', '🚶 Walk-ins / Manual', '#D97706']
+                ].map(([mode, label, activeColor]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setBookingChannelFilter(mode)}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      backgroundColor: bookingChannelFilter === mode ? activeColor : 'transparent',
+                      color: bookingChannelFilter === mode ? '#FFFFFF' : '#64748B',
+                      fontWeight: 700,
+                      fontSize: '0.78rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
               <select
                 value={bookingStatusFilter}
                 onChange={(e) => setBookingStatusFilter(e.target.value)}
@@ -3129,26 +3648,49 @@ export const AdminPage = () => {
                     </div>
                   )}
 
-                  <button
-                    onClick={handleSeedDatabase}
-                    disabled={isSeeding}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      backgroundColor: isSeeding ? '#64748B' : '#0F172A',
-                      color: '#FFFFFF',
-                      border: 'none',
-                      padding: '0.7rem 1.25rem',
-                      borderRadius: '8px',
-                      fontSize: '0.85rem',
-                      fontWeight: 700,
-                      cursor: isSeeding ? 'not-allowed' : 'pointer'
-                    }}
-                  >
-                    <RefreshCw size={15} style={{ animation: isSeeding ? 'spin 1s linear infinite' : 'none' }} />
-                    {isSeeding ? 'Seeding Firestore...' : 'Seed Firebase Database'}
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={handleSeedDatabase}
+                      disabled={isSeeding}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        backgroundColor: isSeeding ? '#64748B' : '#0F172A',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        padding: '0.7rem 1.25rem',
+                        borderRadius: '8px',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        cursor: isSeeding ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      <RefreshCw size={15} style={{ animation: isSeeding ? 'spin 1s linear infinite' : 'none' }} />
+                      {isSeeding ? 'Seeding Firestore...' : 'Seed Firebase Database'}
+                    </button>
+
+                    <button
+                      onClick={handleResetAndStartFresh}
+                      disabled={isSeeding}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        backgroundColor: '#DC2626',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        padding: '0.7rem 1.25rem',
+                        borderRadius: '8px',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        cursor: isSeeding ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      <Trash2 size={15} />
+                      Wipe Users & Start Fresh Database
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -3437,9 +3979,23 @@ export const AdminPage = () => {
                   style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
                 >
                   <option value="">-- Manual Guest / New Entry --</option>
-                  {users.map(u => (
-                    <option key={u.id} value={u.id}>{u.fullName} ({u.email} - {u.passType})</option>
-                  ))}
+                  {users.map(u => {
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    const activeBk = (bookings || []).find(b => 
+                      (b.userId === u.id || (b.userPhone && u.phone && b.userPhone.replace(/\D/g, '') === u.phone.replace(/\D/g, ''))) &&
+                      !['CANCELLED', 'COMPLETED'].includes(b.status) &&
+                      (!b.endDate || b.endDate >= todayStr)
+                    );
+                    return (
+                      <option 
+                        key={u.id} 
+                        value={u.id}
+                        disabled={Boolean(activeBk)}
+                      >
+                        {u.fullName} ({u.email || u.phone || 'No Contact'}) {activeBk ? `[🔴 Occupies Desk ${activeBk.seatNumber}]` : `[🟢 Available - ${u.passType || 'DAILY'}]`}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -3669,7 +4225,7 @@ export const AdminPage = () => {
                 );
               })()}
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   onClick={() => setShowReservationModal(false)}
@@ -3678,10 +4234,18 @@ export const AdminPage = () => {
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: 'none', backgroundColor: '#D97706', color: '#FFFFFF', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
+                  type="button"
+                  onClick={(e) => handleAdminReservationSubmit(e, 'RESERVE')}
+                  style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: '1px solid #D97706', backgroundColor: '#FFFBEB', color: '#B45309', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
                 >
-                  Create & Confirm Reservation
+                  🟡 Hold as Reservation
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleAdminReservationSubmit(e, 'BOOK')}
+                  style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: 'none', backgroundColor: '#059669', color: '#FFFFFF', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  🟢 Book Cabin (Instant Check-In)
                 </button>
               </div>
             </form>
@@ -4637,6 +5201,23 @@ export const AdminPage = () => {
 
             const displayName = student.fullName || student.name || 'Scholar';
             const newStatus = mode === 'BOOK' ? 'OCCUPIED' : 'RESERVED';
+
+            // Check if student already holds another active desk
+            const todayStr = new Date().toISOString().split('T')[0];
+            const dupBooking = (bookings || []).find(b => {
+              if (['CANCELLED', 'COMPLETED'].includes(b.status)) return false;
+              if (b.endDate && b.endDate < todayStr) return false;
+              if (seat.id && b.seatId === seat.id) return false;
+              const matchesUser = (student.id && b.userId === student.id) ||
+                                  (student.phone && b.userPhone && b.userPhone.replace(/\D/g, '') === (student.phone || '').replace(/\D/g, '')) ||
+                                  (student.email && b.userEmail && (student.email || '').trim() && b.userEmail.toLowerCase() === (student.email || '').toLowerCase());
+              return matchesUser;
+            });
+
+            if (dupBooking) {
+              alert(`⚠️ Scholar "${displayName}" already holds an active desk (Desk ${dupBooking.seatNumber}, valid until ${dupBooking.endDate || 'active'}). A student cannot hold multiple active desks simultaneously.`);
+              return;
+            }
 
             // 1) Create booking in Firestore
             const bookingCode = `QD-MAP-${Math.floor(1000 + Math.random() * 9000)}`;

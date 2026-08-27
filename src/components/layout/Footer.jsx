@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, MapPin, Mail, Phone, Instagram, Facebook, Shield } from 'lucide-react';
+import { MapPin, Mail, Phone, Instagram, Facebook, Shield } from 'lucide-react';
+import whiteLogoImg from '../../../image/White logo.jpg';
 
 export const Footer = () => {
   return (
@@ -19,27 +20,38 @@ export const Footer = () => {
         }}>
           {/* Brand Info */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
-              <div style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: 'var(--accent)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--primary)'
-              }}>
-                <BookOpen size={20} />
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              <img
+                src={whiteLogoImg}
+                alt="The Quiet Desk White Logo"
+                style={{
+                  height: '46px',
+                  width: 'auto',
+                  objectFit: 'contain',
+                  borderRadius: '6px',
+                  display: 'block'
+                }}
+              />
+              <div>
+                <div style={{
+                  fontFamily: 'var(--font-headline)',
+                  fontSize: '1.2rem',
+                  fontWeight: 700,
+                  color: '#FFFFFF',
+                  lineHeight: 1.15
+                }}>
+                  The Quiet Desk
+                </div>
+                <div style={{
+                  fontSize: '0.65rem',
+                  color: 'var(--accent)',
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  fontWeight: 600
+                }}>
+                  Kathmandu · Silence, by design.
+                </div>
               </div>
-              <span style={{
-                fontFamily: 'var(--font-headline)',
-                fontSize: '1.25rem',
-                fontWeight: 700,
-                color: '#FFFFFF'
-              }}>
-                The Quiet Desk
-              </span>
             </div>
             <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.9rem', lineHeight: 1.6 }}>
               Silence, by design. A premium study and workspace environment located in the heart of Kathmandu.

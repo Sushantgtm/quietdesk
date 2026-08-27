@@ -55,7 +55,9 @@ export const StudentProfileModal = ({
 
   const displayName = user.fullName || user.name || '—';
   const initials = displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || 'U';
-  const userStatus = user.status || user.membershipStatus || 'ACTIVE';
+  const todayStr = new Date().toISOString().split('T')[0];
+  const hasLiveBooking = userBookings.some(b => !['CANCELLED', 'COMPLETED'].includes(b.status) && (!b.endDate || b.endDate >= todayStr));
+  const userStatus = hasLiveBooking ? 'ACTIVE' : (user.membershipStatus || user.status || 'INACTIVE');
 
   return (
     <div style={{

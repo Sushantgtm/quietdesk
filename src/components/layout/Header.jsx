@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { BookOpen, UserCheck, Menu, X, Shield } from 'lucide-react';
+import { UserCheck, Menu, X, Shield } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import logoImg from '../../../image/logo.png';
 
 export const Header = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -145,25 +146,35 @@ export const Header = () => {
           height: '72px'
         }}>
           {/* Brand */}
-          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', textDecoration: 'none' }}>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '12px',
-              background: 'var(--primary)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--accent)',
-              boxShadow: '0 2px 8px rgba(74,60,43,0.2)'
-            }}>
-              <BookOpen size={20} />
-            </div>
+          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none' }}>
+            <img
+              src={logoImg}
+              alt="The Quiet Desk Logo"
+              style={{
+                height: '44px',
+                width: 'auto',
+                objectFit: 'contain',
+                mixBlendMode: 'multiply',
+                display: 'block'
+              }}
+            />
             <div>
-              <div style={{ fontFamily: 'var(--font-headline)', fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary)', lineHeight: 1.1 }}>
+              <div style={{
+                fontFamily: 'var(--font-headline)',
+                fontSize: '1.25rem',
+                fontWeight: 700,
+                color: 'var(--primary)',
+                lineHeight: 1.15
+              }}>
                 The Quiet Desk
               </div>
-              <div style={{ fontSize: '0.68rem', color: 'var(--accent-hover)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>
+              <div style={{
+                fontSize: '0.68rem',
+                color: 'var(--accent-hover)',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                fontWeight: 600
+              }}>
                 Kathmandu · Silence, by design.
               </div>
             </div>

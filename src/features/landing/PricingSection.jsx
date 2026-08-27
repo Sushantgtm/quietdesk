@@ -32,20 +32,13 @@ export const PricingSection = () => {
     } else if (typeof plan.features === 'string') {
       featuresList = plan.features.split(',').map(f => f.trim()).filter(Boolean);
     } else {
-      featuresList = ['Full workspace access', 'High-speed Wi-Fi', 'Free hot beverages'];
+      featuresList = ['Full workspace access', 'High-speed Wi-Fi', 'Quiet focus environment'];
     }
 
-    // Determine locker note
-    let lockerNote = plan.lockerNote;
-    if (!lockerNote) {
-      if (plan.lockerEligible === false || plan.id?.includes('daily')) {
-        lockerNote = '';
-      } else if (plan.id?.includes('weekly')) {
-        lockerNote = '+NPR 300 / week';
-      } else if (plan.id?.includes('monthly')) {
-        lockerNote = '+NPR 1,000 / month';
-      }
-    }
+    // Determine key locker note (without showing price)
+    let lockerNote = plan.lockerEligible === false || plan.id?.includes('daily')
+      ? 'Optional on-site upon request'
+      : 'Secure Key Locker Available';
 
     const cta = plan.cta || (
       plan.id?.includes('daily') ? 'Get Day Pass' : plan.id?.includes('weekly') ? 'Reserve Week' : 'Join Membership'
@@ -88,9 +81,9 @@ export const PricingSection = () => {
           }}>
             Flexible Access
           </div>
-          <h2 style={{ marginBottom: '1rem' }}>Transparent Pricing</h2>
+          <h2 style={{ marginBottom: '1rem' }}>Access Plans</h2>
           <p style={{ color: 'var(--text-secondary)' }}>
-            Choose a pass that matches your study schedule. Optional secure lockers available for weekly & monthly packages.
+            Choose a pass that matches your study schedule. Optional secure lockers available for weekly & monthly packages. Contact us for current pricing.
           </p>
         </div>
 
@@ -145,7 +138,8 @@ export const PricingSection = () => {
                   {plan.description}
                 </p>
 
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                {/* Price hidden per owner's request — data retained */}
+                <div style={{ display: 'none' }}>
                   <span style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--primary)', fontFamily: 'var(--font-headline)' }}>
                     {plan.formattedPrice}
                   </span>
@@ -154,41 +148,23 @@ export const PricingSection = () => {
                   </span>
                 </div>
 
-                {/* Locker Extra Charge Highlight Banner */}
-                {plan.lockerNote ? (
-                  <div style={{
-                    marginBottom: '1.5rem',
-                    padding: '0.6rem 0.85rem',
-                    backgroundColor: 'var(--accent-light)',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-accent)',
-                    fontSize: '0.825rem',
-                    fontWeight: 600,
-                    color: 'var(--primary)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem'
-                  }}>
-                    <Lock size={15} style={{ color: 'var(--accent-hover)', flexShrink: 0 }} />
-                    <span>Locker Facility: <strong>{plan.lockerNote}</strong></span>
-                  </div>
-                ) : (
-                  <div style={{
-                    marginBottom: '1.5rem',
-                    padding: '0.6rem 0.85rem',
-                    backgroundColor: 'var(--bg-main)',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-subtle)',
-                    fontSize: '0.825rem',
-                    color: 'var(--text-muted)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem'
-                  }}>
-                    <Lock size={15} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                    <span>Locker Facility: Optional on-site upon request</span>
-                  </div>
-                )}
+                {/* Key Locker Facility Highlight Banner (no price) */}
+                <div style={{
+                  marginBottom: '1.5rem',
+                  padding: '0.6rem 0.85rem',
+                  backgroundColor: plan.isHighlighted ? 'var(--accent-light)' : 'var(--bg-main)',
+                  borderRadius: 'var(--radius-md)',
+                  border: plan.isHighlighted ? '1px solid var(--border-accent)' : '1px solid var(--border-subtle)',
+                  fontSize: '0.825rem',
+                  fontWeight: 600,
+                  color: 'var(--primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}>
+                  <Lock size={15} style={{ color: plan.isHighlighted ? 'var(--accent-hover)' : 'var(--text-muted)', flexShrink: 0 }} />
+                  <span>Key Locker: <strong>{plan.lockerNote}</strong></span>
+                </div>
 
                 <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '1.25rem', marginBottom: '2rem' }}>
                   <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>

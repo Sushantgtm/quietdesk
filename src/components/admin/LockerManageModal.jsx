@@ -146,7 +146,7 @@ export const LockerManageModal = ({
                 {locker.label || locker.lockerNumber} • Storage Management
               </div>
               <div style={{ fontSize: '0.78rem', color: '#94A3B8' }}>
-                Keyless Digital Keypad Locker Unit
+                Physical Key Storage Locker Unit
               </div>
             </div>
           </div>

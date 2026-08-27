@@ -51,6 +51,11 @@ export const BookingPage = () => {
     }
   }, [urlSeatId]);
 
+  // Scroll to top whenever step changes so user sees the form from the top
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [step]);
+
   const selectedSeatObj = seats.find(s => s.id === selectedSeatId) || seats.find(s => s.status === 'AVAILABLE');
 
   const getLockerFee = () => {
@@ -81,9 +86,10 @@ export const BookingPage = () => {
     setStep(step + 1);
   };
 
-  const handleConfirmBooking = async () => {
+  const handleConfirmBooking = async (mode = 'BOOK') => {
     setSubmitting(true);
     try {
+      const status = mode === 'BOOK' ? 'CONFIRMED' : 'PENDING_CONFIRMATION';
       const booking = await createBooking({
         seatId: selectedSeatObj.id,
         seatNumber: selectedSeatObj.seatNumber,
@@ -98,7 +104,9 @@ export const BookingPage = () => {
         userName: formData.userName,
         userEmail: formData.userEmail,
         userPhone: formData.userPhone,
-        totalAmount: calculateTotal()
+        totalAmount: calculateTotal(),
+        status,
+        bookingType: 'WEBSITE_BOOKING'
       });
       setConfirmedBooking(booking);
       setStep(4);
@@ -120,7 +128,7 @@ export const BookingPage = () => {
           {step < 4 && (
             <div style={{ marginBottom: '3rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', position: 'relative' }}>
-                {['Select Desk & Pass', 'Your Information', 'Review & Pay'].map((label, index) => {
+                {['Select Desk & Pass', 'Your Information', 'Review Details'].map((label, index) => {
                   const stepNum = index + 1;
                   const isActive = step === stepNum;
                   const isDone = step > stepNum;
@@ -173,8 +181,8 @@ export const BookingPage = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
                   {[
                     { type: 'DAILY', label: 'Daily Pass', price: 'NPR 500 / day', lockerText: 'Locker on request' },
-                    { type: 'WEEKLY', label: 'Weekly Pass', price: 'NPR 2,800 / wk', lockerText: 'Locker +NPR 300/wk' },
-                    { type: 'MONTHLY', label: 'Monthly Membership', price: 'NPR 9,500 / mo', lockerText: 'Locker +NPR 1,000/mo' }
+                    { type: 'WEEKLY', label: 'Weekly Pass', price: 'NPR 2,800 / wk', lockerText: 'Locker available' },
+                    { type: 'MONTHLY', label: 'Monthly Membership', price: 'NPR 9,500 / mo', lockerText: 'Locker available' }
                   ].map((plan) => (
                     <button
                       key={plan.type}
@@ -193,7 +201,8 @@ export const BookingPage = () => {
                       }}
                     >
                       <div style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.25rem' }}>{plan.label}</div>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--accent-hover)', fontWeight: 600 }}>{plan.price}</div>
+                      {/* Price hidden per owner's request — data retained */}
+                      <div style={{ display: 'none', fontSize: '0.85rem', color: 'var(--accent-hover)', fontWeight: 600 }}>{plan.price}</div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
                         🔒 {plan.lockerText}
                       </div>
@@ -205,7 +214,7 @@ export const BookingPage = () => {
               {/* Locker Facility Selector Option */}
               <div style={{ marginBottom: '2rem' }}>
                 <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--primary)' }}>
-                  2. Locker Facility Option
+                  2. Key Locker Facility Option
                 </label>
                 {selectedPassType === 'WEEKLY' || selectedPassType === 'MONTHLY' ? (
                   <div
@@ -238,7 +247,7 @@ export const BookingPage = () => {
                       </div>
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          Add Secure Personal Locker Facility
+                          Add Secure Key Locker Facility
                           {includeLocker && (
                             <span style={{ fontSize: '0.75rem', backgroundColor: 'var(--accent)', color: 'var(--primary)', padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-full)', fontWeight: 800 }}>
                               ADDED
@@ -246,7 +255,7 @@ export const BookingPage = () => {
                           )}
                         </div>
                         <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-                          Keyless digital locker to safely store books & tech. Extra charge: <strong>{selectedPassType === 'WEEKLY' ? '+NPR 300 / week' : '+NPR 1,000 / month'}</strong>
+                          Physical key locker to safely store your books &amp; personal tech.
                         </div>
                       </div>
                     </div>
@@ -270,7 +279,7 @@ export const BookingPage = () => {
                     gap: '0.75rem'
                   }}>
                     <Lock size={18} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                    <span>Daily lockers are available on-site upon special request at reception desk. Select <strong>Weekly</strong> or <strong>Monthly</strong> package to reserve a personal locker online.</span>
+                    <span>Key lockers are available on-site upon request at reception desk. Select <strong>Weekly</strong> or <strong>Monthly</strong> package to reserve a personal key locker.</span>
                   </div>
                 )}
               </div>
@@ -348,12 +357,14 @@ export const BookingPage = () => {
                     <div style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--primary)' }}>
                       Desk {selectedSeatObj.seatNumber} • {selectedSeatObj.zone} ({selectedPassType})
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                    {/* Price hidden per owner's request — data retained */}
+                    <div style={{ display: 'none', fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
                       Base: NPR {calculateBasePrice()} {getLockerFee() > 0 ? `+ Locker Facility: NPR ${getLockerFee()}` : ''}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--primary)', fontFamily: 'var(--font-headline)' }}>
+                    {/* Price hidden per owner's request — data retained */}
+                    <div style={{ display: 'none', fontSize: '1.4rem', fontWeight: 800, color: 'var(--primary)', fontFamily: 'var(--font-headline)' }}>
                       NPR {calculateTotal()}
                     </div>
                     {includeLocker && (
@@ -579,9 +590,9 @@ export const BookingPage = () => {
                     <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--primary)' }}>{selectedPassType} Pass</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Locker Facility</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Key Locker Facility</div>
                     <div style={{ fontSize: '1rem', fontWeight: 700, color: includeLocker ? 'var(--accent-hover)' : 'var(--text-main)' }}>
-                      {includeLocker ? `🔒 Included (+NPR ${getLockerFee()})` : 'Not Selected'}
+                      {includeLocker ? '🔒 Key Locker Included' : 'Not Selected'}
                     </div>
                   </div>
                   <div>
@@ -608,10 +619,11 @@ export const BookingPage = () => {
                   </div>
                 </div>
 
+                {/* Total amount hidden per owner's request — data retained */}
                 <div style={{
+                  display: 'none',
                   borderTop: '1px dashed var(--border-accent)',
                   paddingTop: '1.25rem',
-                  display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center'
                 }}>
@@ -627,18 +639,28 @@ export const BookingPage = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                 <button onClick={() => setStep(2)} className="btn btn-outline" disabled={submitting}>
                   <ArrowLeft size={16} /> Back
                 </button>
-                <button
-                  onClick={handleConfirmBooking}
-                  className="btn btn-primary"
-                  disabled={submitting}
-                  style={{ padding: '0.875rem 2.25rem' }}
-                >
-                  {submitting ? 'Submitting...' : 'Submit Reservation Request'}
-                </button>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => handleConfirmBooking('RESERVE')}
+                    className="btn btn-outline"
+                    disabled={submitting}
+                    style={{ borderColor: 'var(--accent)', color: 'var(--primary)', fontWeight: 700 }}
+                  >
+                    🟡 Reserve Desk Request
+                  </button>
+                  <button
+                    onClick={() => handleConfirmBooking('BOOK')}
+                    className="btn btn-primary"
+                    disabled={submitting}
+                    style={{ padding: '0.875rem 2.25rem' }}
+                  >
+                    {submitting ? 'Processing...' : '🟢 Book Cabin Now'}
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -734,12 +756,13 @@ export const BookingPage = () => {
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>Locker Access</div>
+                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>Key Locker Access</div>
                     <div style={{ fontSize: '0.95rem', fontWeight: 700, color: confirmedBooking.hasLocker ? 'var(--accent)' : 'rgba(255,255,255,0.8)' }}>
-                      {confirmedBooking.hasLocker ? `🔒 Included (+NPR ${confirmedBooking.lockerFee})` : 'Not Included'}
+                      {confirmedBooking.hasLocker ? '🔒 Key Locker Included' : 'Not Included'}
                     </div>
                   </div>
-                  <div>
+                  {/* Total Amount hidden per owner's request — data retained */}
+                  <div style={{ display: 'none' }}>
                     <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>Total Amount</div>
                     <div style={{ fontSize: '1rem', fontWeight: 800, color: '#FFFFFF' }}>NPR {confirmedBooking.totalAmount}</div>
                   </div>

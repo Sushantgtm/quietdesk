@@ -22,14 +22,13 @@ export const MOCK_ADMINS_DATA = [
 ];
 
 export const MOCK_AMENITIES_DATA = [
-  { id: 'amenity_wifi', iconName: 'Wifi', title: 'Gigabit Fiber Internet', desc: 'Dual-band enterprise Wi-Fi with uninterrupted uptime & battery backup.' },
-  { id: 'amenity_power', iconName: 'Zap', title: 'Dedicated Power Outlets', desc: 'Dual AC sockets + USB-C fast charging at every seat.' },
-  { id: 'amenity_beverage', iconName: 'Coffee', title: 'Artisanal Beverage Bar', desc: 'Unlimited fresh French press coffee, green tea & filtered spring water.' },
-  { id: 'amenity_lockers', iconName: 'Lock', title: 'Private Secure Lockers', desc: '20 Keyless digital lockers to safely store your books and laptop.' },
-  { id: 'amenity_lighting', iconName: 'Sun', title: 'Natural & Warm Lighting', desc: 'Floor-to-ceiling glass windows and individual warm LED lamps.' },
-  { id: 'amenity_print', iconName: 'Printer', title: 'Printing & Scanning', desc: 'High-speed laser printing and document scanning services.' },
-  { id: 'amenity_monitors', iconName: 'Monitor', title: 'Monitor Pod Options', desc: 'External 27-inch 4K monitors for programmers and video editors.' },
-  { id: 'amenity_backup', iconName: 'ShieldAlert', title: '100% Inverter Backup', desc: 'Kathmandu power cut proof. Automated instant generator backup.' }
+  { id: 'amenity_ac', iconName: 'Wind', title: 'AC Available', desc: 'Fully air-conditioned and climate-controlled rooms for year-round focus.' },
+  { id: 'amenity_quiet', iconName: 'VolumeX', title: 'Quiet Environment', desc: 'Strict acoustic silence discipline enforced across all study zones.' },
+  { id: 'amenity_chair', iconName: 'Armchair', title: 'Comfortable Chairs', desc: 'High-comfort ergonomic chairs designed for long hours of fatigue-free study.' },
+  { id: 'amenity_power', iconName: 'Zap', title: 'Charging Plug in Each Seat', desc: 'Dedicated dual power outlets at every desk for your laptops and devices.' },
+  { id: 'amenity_lockers', iconName: 'Key', title: 'Private Key Lockers', desc: '20 Secure physical key lockers to safely store your books and belongings.' },
+  { id: 'amenity_wifi', iconName: 'Wifi', title: 'Gigabit Fiber Internet', desc: 'Dual-band enterprise Wi-Fi with uninterrupted uptime & speed.' },
+  { id: 'amenity_backup', iconName: 'ShieldAlert', title: '100% Inverter Backup', desc: 'Kathmandu power cut proof. Automated instant generator and inverter backup.' }
 ];
 
 export const MOCK_BRANCHES_DATA = [
@@ -43,7 +42,7 @@ export const MOCK_BRANCHES_DATA = [
     hours: '7:00 AM - 10:00 PM (Seven days a week)',
     totalCapacity: 62,
     acousticPolicy: 'Strict Silence Enforced in Main Study Zones',
-    facilities: ['Enterprise Wi-Fi', 'Artisanal Coffee Bar', '24/7 Power Backup', 'Ergonomic Desk Stations', '20 Digital Lockers']
+    facilities: ['Enterprise Wi-Fi', '24/7 Power Backup', 'Ergonomic Desk Stations', '20 Key Lockers']
   }
 ];
 

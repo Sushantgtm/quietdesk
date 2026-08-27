@@ -1,88 +1,17 @@
-import { collection, onSnapshot, doc, setDoc, updateDoc, getDocs, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, updateDoc, getDocs, getDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase';
 
-export const MOCK_USERS = [
-  {
-    id: 'usr_101',
-    name: 'Aarav Sharma',
-    email: 'aarav.sharma@example.com',
-    phone: '+977 9841234567',
-    address: 'Lazimpat, Kathmandu',
-    emergencyContact: 'Sunil Sharma (+977 9841112233)',
-    passType: 'DAILY',
-    status: 'ACTIVE',
-    createdAt: '2026-08-10T10:00:00Z',
-    notes: 'Standard Desk Scholar. Preparing for Civil Service Exam.',
-    idProof: 'Citizenship #48910293'
-  },
-  {
-    id: 'usr_102',
-    name: 'Pooja Shrestha',
-    email: 'pooja.s@example.com',
-    phone: '+977 9851098765',
-    address: 'Jhamsikhel, Lalitpur',
-    emergencyContact: 'Ramesh Shrestha (+977 9851998877)',
-    passType: 'WEEKLY',
-    status: 'ACTIVE',
-    createdAt: '2026-08-01T09:30:00Z',
-    notes: 'Prefers Window Nook seats (B Zone). High Wi-Fi usage.',
-    idProof: 'Passport #N0982314'
-  },
-  {
-    id: 'usr_103',
-    name: 'Rohan Thapa',
-    email: 'rohan.t@example.com',
-    phone: '+977 9801122334',
-    address: 'Baluwatar, Kathmandu',
-    emergencyContact: 'Gita Thapa (+977 9801998877)',
-    passType: 'DAILY',
-    status: 'ACTIVE',
-    createdAt: '2026-08-15T14:20:00Z',
-    notes: 'Engineering Student, IOE Pulchowk.',
-    idProof: 'College ID #2024-ENG-08'
-  },
-  {
-    id: 'usr_104',
-    name: 'Sneha Gurung',
-    email: 'sneha.g@example.com',
-    phone: '+977 9812345678',
-    address: 'Lazimpat Height, Kathmandu',
-    emergencyContact: 'Bikram Gurung (+977 9812998877)',
-    passType: 'MONTHLY',
-    status: 'ACTIVE',
-    createdAt: '2026-07-20T11:00:00Z',
-    notes: 'Remote Software Developer. Needs Private Cabin & Locker.',
-    idProof: 'National ID #778210923'
-  },
-  {
-    id: 'usr_105',
-    name: 'Kiran Adhikari',
-    email: 'kiran.a@example.com',
-    phone: '+977 9849988776',
-    address: 'Suryabinayak, Bhaktapur',
-    emergencyContact: 'Niranjan Adhikari (+977 9849112233)',
-    passType: 'DAILY',
-    status: 'INACTIVE',
-    createdAt: '2026-08-12T08:15:00Z',
-    notes: 'Medical entrance candidate.',
-    idProof: 'Citizenship #12093847'
-  },
-  {
-    id: 'usr_106',
-    name: 'Bina Maharjan',
-    email: 'bina.m@example.com',
-    phone: '+977 9860112233',
-    address: 'Thamel, Kathmandu',
-    emergencyContact: 'Prakash Maharjan (+977 9860998877)',
-    passType: 'WEEKLY',
-    status: 'ACTIVE',
-    createdAt: '2026-08-18T16:45:00Z',
-    notes: 'Research Fellow, T.U.',
-    idProof: 'Faculty Card #TU-9821'
-  }
-];
+export const MOCK_USERS = [];
 
-const LOCAL_STORAGE_USERS_KEY = 'quietdesk_users_v1';
+const LOCAL_STORAGE_USERS_KEY = 'quietdesk_users_v5';
+
+// Automatically purge legacy cache keys on initial load
+try {
+  ['v1', 'v2', 'v3', 'v4'].forEach(v => {
+    localStorage.removeItem(`quietdesk_users_${v}`);
+    localStorage.removeItem(`quietdesk_bookings_${v}`);
+  });
+} catch (e) {}
 
 export const getLocalUsers = () => {
   const stored = localStorage.getItem(LOCAL_STORAGE_USERS_KEY);
@@ -101,13 +30,18 @@ export const saveLocalUsers = (users) => {
   localStorage.setItem(LOCAL_STORAGE_USERS_KEY, JSON.stringify(users));
 };
 
+export const resetLocalUsers = () => {
+  localStorage.setItem(LOCAL_STORAGE_USERS_KEY, JSON.stringify(MOCK_USERS));
+  return MOCK_USERS;
+};
+
 // Normalize a raw user doc so name & fullName always agree
 const normalizeUser = (raw) => {
   const base = { ...raw };
   // Ensure both fields exist
   base.fullName = base.fullName || base.name || '';
   base.name = base.fullName;
-  // Ensure status field exists (walk-in sets status, admin register sets membershipStatus)
+  // Ensure status field exists
   base.status = base.status || base.membershipStatus || 'ACTIVE';
   base.membershipStatus = base.status;
   return base;
@@ -118,15 +52,11 @@ export const subscribeUsers = (onUsersUpdate) => {
   try {
     const usersRef = collection(db, 'users');
     unsub = onSnapshot(usersRef, (snapshot) => {
-      if (!snapshot.empty) {
-        const firestoreUsers = snapshot.docs.map(d => normalizeUser({ id: d.id, ...d.data() }));
-        saveLocalUsers(firestoreUsers);
-        onUsersUpdate(firestoreUsers);
-      } else {
-        onUsersUpdate(getLocalUsers().map(normalizeUser));
-      }
+      const firestoreUsers = snapshot.docs.map(d => normalizeUser({ id: d.id, ...d.data() }));
+      saveLocalUsers(firestoreUsers);
+      onUsersUpdate(firestoreUsers);
     }, (error) => {
-      console.warn('Firestore users subscription fallback:', error.message);
+      console.warn('Firestore users subscription error, using local fallback:', error.message);
       onUsersUpdate(getLocalUsers().map(normalizeUser));
     });
   } catch (e) {
@@ -195,30 +125,58 @@ export const updateUser = async (userId, updatedFields) => {
 
 export const findOrCreateStudent = async (studentData) => {
   const users = getLocalUsers();
-  const phone = (studentData.phone || '').trim();
-  const email = (studentData.email || '').trim().toLowerCase();
+  const phoneClean = (studentData.phone || '').trim().replace(/\D/g, '');
+  const emailClean = (studentData.email || '').trim().toLowerCase();
 
-  let existing = users.find(u => 
-    (phone && u.phone && u.phone.trim() === phone) ||
-    (email && u.email && u.email.trim().toLowerCase() === email)
-  );
+  let existing = users.find(u => {
+    const uPhone = (u.phone || '').trim().replace(/\D/g, '');
+    const uEmail = (u.email || '').trim().toLowerCase();
+    return (phoneClean && uPhone && phoneClean === uPhone) ||
+           (emailClean && uEmail && emailClean === uEmail);
+  });
 
   if (existing) {
     const updated = {
+      ...existing,
       ...studentData,
       id: existing.id,
       userCode: existing.userCode || `QD-STU-${Math.floor(1000 + Math.random() * 9000)}`,
       updatedAt: new Date().toISOString()
     };
     await updateUser(existing.id, updated);
-    return { user: { ...existing, ...updated }, isNew: false };
+    return { user: updated, isNew: false };
   } else {
     const userCode = `QD-STU-${Math.floor(1000 + Math.random() * 9000)}`;
     const created = await createUser({
       ...studentData,
-      userCode
+      userCode,
+      status: studentData.status || 'ACTIVE',
+      membershipStatus: studentData.membershipStatus || 'ACTIVE',
+      joinedDate: studentData.joinedDate || new Date().toISOString()
     });
     return { user: created, isNew: true };
   }
 };
 
+export const deleteUser = async (userId) => {
+  const currentLocal = getLocalUsers();
+  const updated = currentLocal.filter(u => u.id !== userId);
+  saveLocalUsers(updated);
+  try {
+    await deleteDoc(doc(db, 'users', userId));
+    console.log('User deleted from Firestore:', userId);
+    return true;
+  } catch (e) {
+    console.warn('Firestore user delete error:', e.message);
+    return false;
+  }
+};
+
+export const purgeAllUsersFromFirestore = async () => {
+  const snapshot = await getDocs(collection(db, 'users'));
+  const deletes = snapshot.docs.map(d => deleteDoc(doc(db, 'users', d.id)));
+  await Promise.all(deletes);
+  saveLocalUsers([]);
+  console.log(`Purged ${snapshot.docs.length} users from Firestore.`);
+  return snapshot.docs.length;
+};

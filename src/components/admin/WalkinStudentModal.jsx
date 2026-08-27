@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, UserPlus, MapPin, Phone, Mail, Calendar, Clock, Lock, 
   CreditCard, FileText, CheckCircle2, AlertTriangle, ShieldCheck, DollarSign,
-  Briefcase, Sparkles, User, Hash
+  Briefcase, Sparkles, User, Hash, Search
 } from 'lucide-react';
+import { useBooking } from '../../context/BookingContext';
 
 export const WalkinStudentModal = ({
   isOpen,
@@ -13,6 +14,7 @@ export const WalkinStudentModal = ({
   plans = [],
   onSubmitSuccess
 }) => {
+  const { bookings = [], users = [] } = useBooking();
   const today = new Date().toISOString().split('T')[0];
 
   const [formData, setFormData] = useState({
@@ -160,6 +162,23 @@ export const WalkinStudentModal = ({
     }
     if (!formData.address.trim()) {
       setErrorMsg('Please enter student physical address.');
+      return;
+    }
+
+    // Check if scholar already has an active booking
+    const todayStr = new Date().toISOString().split('T')[0];
+    const enteredPhone = formData.phone.trim().replace(/\D/g, '');
+    const enteredEmail = (formData.email || '').trim().toLowerCase();
+    const duplicateBooking = (bookings || []).find(b => {
+      if (['CANCELLED', 'COMPLETED'].includes(b.status)) return false;
+      if (b.endDate && b.endDate < todayStr) return false;
+      const bPhone = (b.userPhone || '').trim().replace(/\D/g, '');
+      const bEmail = (b.userEmail || '').trim().toLowerCase();
+      return (enteredPhone && bPhone && enteredPhone === bPhone) || (enteredEmail && bEmail && enteredEmail === bEmail);
+    });
+
+    if (duplicateBooking) {
+      setErrorMsg(`⚠️ Scholar "${duplicateBooking.userName || formData.fullName}" already has an active seat assigned (Desk ${duplicateBooking.seatNumber}, valid until ${duplicateBooking.endDate || 'active'}). A student cannot hold multiple active seats simultaneously.`);
       return;
     }
 
@@ -654,7 +673,7 @@ export const WalkinStudentModal = ({
 
                 {formData.hasLocker && (
                   <div style={{ marginTop: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1E40AF' }}>Select Locker:</span>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1E40AF' }}>Select Key Locker (A–T):</span>
                     {lockers && lockers.length > 0 ? (
                       <select
                         value={formData.lockerNumber}
@@ -669,9 +688,11 @@ export const WalkinStudentModal = ({
                           color: '#0F172A'
                         }}
                       >
-                        {lockers.map(l => (
+                        {[...lockers]
+                          .sort((a, b) => (a.label || a.lockerNumber || '').localeCompare(b.label || b.lockerNumber || '', undefined, { numeric: true, sensitivity: 'base' }))
+                          .map(l => (
                           <option key={l.id} value={l.lockerNumber}>
-                            {l.lockerNumber} ({l.status === 'AVAILABLE' ? '🟢 Free' : l.status === 'ASSIGNED' ? '🔵 Busy' : '🔴 Maint'})
+                            {l.label || l.lockerNumber} ({l.status === 'AVAILABLE' ? '🟢 Free' : l.status === 'ASSIGNED' ? '🔵 Busy' : '🔴 Maint'})
                           </option>
                         ))}
                       </select>

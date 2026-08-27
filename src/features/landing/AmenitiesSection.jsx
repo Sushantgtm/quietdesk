@@ -1,20 +1,35 @@
 import React from 'react';
 import { useBooking } from '../../context/BookingContext';
-import { Wifi, Zap, Coffee, Lock, Sun, Printer, ShieldAlert, Monitor, Sparkles } from 'lucide-react';
+import { INITIAL_AMENITIES } from '../../services/firebase/amenityService';
+import { Wifi, Zap, Lock, Key, Wind, VolumeX, Armchair, ShieldAlert, Sparkles } from 'lucide-react';
 
 const ICON_MAP = {
-  Wifi: <Wifi size={24} />,
+  Wind: <Wind size={24} />,
+  VolumeX: <VolumeX size={24} />,
+  Armchair: <Armchair size={24} />,
   Zap: <Zap size={24} />,
-  Coffee: <Coffee size={24} />,
+  Key: <Key size={24} />,
   Lock: <Lock size={24} />,
-  Sun: <Sun size={24} />,
-  Printer: <Printer size={24} />,
-  Monitor: <Monitor size={24} />,
+  Wifi: <Wifi size={24} />,
   ShieldAlert: <ShieldAlert size={24} />
 };
 
 export const AmenitiesSection = () => {
   const { amenities } = useBooking();
+
+  // Ensure legacy deprecated items are filtered and the requested amenities always display
+  const rawList = (amenities && amenities.length > 0) ? amenities : INITIAL_AMENITIES;
+  const filtered = rawList.filter(item => {
+    const title = (item.title || '').toLowerCase();
+    const id = item.id || '';
+    if (id === 'amenity_beverage' || title.includes('artisanal') || title.includes('beverage') || title.includes('coffee')) return false;
+    if (id === 'amenity_print' || title.includes('printing') || title.includes('scanning')) return false;
+    if (id === 'amenity_monitors' || title.includes('monitor')) return false;
+    if (id === 'amenity_lighting' || title.includes('lighting')) return false;
+    return true;
+  });
+
+  const displayList = filtered.length >= 4 ? filtered : INITIAL_AMENITIES;
 
   return (
     <section id="features" className="section">
@@ -44,7 +59,7 @@ export const AmenitiesSection = () => {
           gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
           gap: '1.75rem'
         }}>
-          {(amenities && amenities.length > 0 ? amenities : []).map((item, idx) => (
+          {displayList.map((item, idx) => (
             <div
               key={item.id || idx}
               className="card"

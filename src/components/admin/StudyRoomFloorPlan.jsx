@@ -185,13 +185,13 @@ export const StudyRoomFloorPlan = ({
     );
   };
 
-  // Render a Locker Tile in the 20-Locker Bank Grid
-  const renderLockerBankItem = (lockerNumStr) => {
-    const targetLockerNum = `L-${lockerNumStr}`;
-    const lockerData = lockerMap[targetLockerNum] || lockerMap[`locker_${lockerNumStr}`] || {
-      id: `locker_${lockerNumStr}`,
+  // Render a Locker Tile in the 20-Locker Bank Grid (Alphabetical A-T)
+  const renderLockerBankItem = (letter) => {
+    const targetLockerNum = `Locker ${letter}`;
+    const lockerData = lockerMap[targetLockerNum] || lockerMap[`L-${letter}`] || lockerMap[`locker_${letter.toLowerCase()}`] || {
+      id: `locker_${letter.toLowerCase()}`,
       lockerNumber: targetLockerNum,
-      label: `Locker ${lockerNumStr}`,
+      label: `Locker ${letter}`,
       status: 'AVAILABLE'
     };
 
@@ -248,7 +248,7 @@ export const StudyRoomFloorPlan = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
           <Lock size={14} style={{ color: lockColor }} />
           <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0F172A' }}>
-            {targetLockerNum}
+            {lockerData.label || targetLockerNum}
           </span>
         </div>
 
@@ -315,7 +315,7 @@ export const StudyRoomFloorPlan = ({
                 Study Room Floor Plan
               </div>
               <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>
-                62 Study Cabins • 20 Digital Lockers
+                62 Study Cabins • 20 Key Lockers
               </div>
             </div>
           </div>
@@ -608,10 +608,10 @@ export const StudyRoomFloorPlan = ({
               <Lock size={18} style={{ color: '#C9A574' }} />
               <div>
                 <span style={{ fontWeight: 800, fontSize: '0.92rem' }}>
-                  Digital Storage Locker Bank (20 Units: L-01 to L-20)
+                  Key Storage Locker Bank (20 Units: L-01 to L-20)
                 </span>
                 <span style={{ fontSize: '0.75rem', color: '#94A3B8', marginLeft: '0.75rem' }}>
-                  Keyless Keypad Security • South Facility Zone
+                  Physical Key Security • South Facility Zone
                 </span>
               </div>
             </div>
@@ -631,17 +631,15 @@ export const StudyRoomFloorPlan = ({
             </div>
           </div>
 
-          {/* 20 Locker Grid (2 rows of 10 lockers) */}
+          {/* 20 Locker Grid (2 rows of 10 lockers, Alphabetical A-T) */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(10, 1fr)',
             gap: '0.65rem'
           }}>
-            {Array.from({ length: 20 }, (_, i) => {
-              const num = i + 1;
-              const numStr = num < 10 ? `0${num}` : `${num}`;
-              return renderLockerBankItem(numStr);
-            })}
+            {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T'].map(letter =>
+              renderLockerBankItem(letter)
+            )}
           </div>
 
           <div style={{ marginTop: '0.6rem', textAlign: 'right', fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>

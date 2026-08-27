@@ -2,7 +2,7 @@ import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, getDocs } fr
 import { db } from './firebase';
 import { MOCK_SEATS } from '../mock/mockData';
 
-const LOCAL_STORAGE_SEATS_KEY = 'quietdesk_seats_v1';
+const LOCAL_STORAGE_SEATS_KEY = 'quietdesk_seats_v3';
 
 export const getLocalSeats = () => {
   const stored = localStorage.getItem(LOCAL_STORAGE_SEATS_KEY);
@@ -37,17 +37,16 @@ export const subscribeSeatAvailability = (onSeatsUpdate) => {
   try {
     const seatsRef = collection(db, 'seats');
     unsub = onSnapshot(seatsRef, (snapshot) => {
-      if (snapshot.empty && !localStorage.getItem(LOCAL_STORAGE_SEATS_KEY)) {
+      if (snapshot.empty) {
         seedSeatsToFirestore();
         onSeatsUpdate(getLocalSeats());
       } else {
         const firestoreSeats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        firestoreSeats.sort((a, b) => parseInt(a.seatNumber || 0) - parseInt(b.seatNumber || 0));
         saveLocalSeats(firestoreSeats);
         onSeatsUpdate(firestoreSeats);
       }
     }, (error) => {
-      console.warn('Firestore subscription fallback to local state:', error.message);
+      console.warn('Firestore seats subscription error, using local fallback:', error.message);
       onSeatsUpdate(getLocalSeats());
     });
   } catch (e) {

@@ -1,9 +1,16 @@
-import { collection, onSnapshot, doc, setDoc, updateDoc, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, updateDoc, getDocs, query, orderBy, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { updateSeatStatusInFirestore } from './seatService';
 import { MOCK_BOOKINGS } from '../mock/mockData';
 
-const LOCAL_STORAGE_BOOKINGS_KEY = 'quietdesk_bookings_v1';
+const LOCAL_STORAGE_BOOKINGS_KEY = 'quietdesk_bookings_v5';
+
+// Automatically purge legacy cache keys on initial load
+try {
+  ['v1', 'v2', 'v3', 'v4'].forEach(v => {
+    localStorage.removeItem(`quietdesk_bookings_${v}`);
+  });
+} catch (e) {}
 
 export const getLocalBookings = () => {
   const stored = localStorage.getItem(LOCAL_STORAGE_BOOKINGS_KEY);
@@ -22,20 +29,21 @@ export const saveLocalBookings = (bookings) => {
   localStorage.setItem(LOCAL_STORAGE_BOOKINGS_KEY, JSON.stringify(bookings));
 };
 
+export const resetLocalBookings = () => {
+  localStorage.setItem(LOCAL_STORAGE_BOOKINGS_KEY, JSON.stringify(MOCK_BOOKINGS));
+  return MOCK_BOOKINGS;
+};
+
 export const subscribeBookings = (onBookingsUpdate) => {
   let unsub = () => {};
   try {
     const bookingsRef = collection(db, 'bookings');
     unsub = onSnapshot(bookingsRef, (snapshot) => {
-      if (!snapshot.empty) {
-        const firestoreBookings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        saveLocalBookings(firestoreBookings);
-        onBookingsUpdate(firestoreBookings);
-      } else {
-        onBookingsUpdate(getLocalBookings());
-      }
+      const firestoreBookings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      saveLocalBookings(firestoreBookings);
+      onBookingsUpdate(firestoreBookings);
     }, (error) => {
-      console.warn('Firestore bookings subscription fallback:', error.message);
+      console.warn('Firestore bookings subscription error, using local fallback:', error.message);
       onBookingsUpdate(getLocalBookings());
     });
   } catch (e) {
@@ -73,7 +81,41 @@ export const createBooking = async (bookingData) => {
   const bookingId = bookingData.id || ('BK-' + Date.now());
   const bookingCode = bookingData.bookingCode || ('QD-' + Math.floor(1000 + Math.random() * 9000));
   
-  // 1. Ensure user is created/updated in the users table first
+  // 1. Enforce: A student cannot book two active seats simultaneously
+  const currentLocal = getLocalBookings();
+  const todayStr = new Date().toISOString().split('T')[0];
+  
+  const studentPhone = (bookingData.userPhone || '').trim().replace(/\D/g, '');
+  const studentEmail = (bookingData.userEmail || '').trim().toLowerCase();
+  const studentUserId = bookingData.userId || null;
+  const requestedSeatId = bookingData.seatId;
+
+  const existingActiveBooking = currentLocal.find(b => {
+    if (bookingData.id && b.id === bookingData.id) return false;
+    if (['CANCELLED', 'COMPLETED'].includes(b.status)) return false;
+    if (b.endDate && b.endDate < todayStr) return false; // expired
+    
+    // If the booking is for the exact same seat extension or renewal, allow
+    if (requestedSeatId && b.seatId === requestedSeatId) return false;
+
+    const bPhone = (b.userPhone || '').trim().replace(/\D/g, '');
+    const bEmail = (b.userEmail || '').trim().toLowerCase();
+    const bUserId = b.userId || null;
+
+    const matchesPhone = studentPhone && bPhone && studentPhone === bPhone;
+    const matchesEmail = studentEmail && bEmail && studentEmail === bEmail;
+    const matchesUserId = studentUserId && bUserId && studentUserId === bUserId;
+
+    return (matchesPhone || matchesEmail || matchesUserId);
+  });
+
+  if (existingActiveBooking) {
+    const desk = existingActiveBooking.seatNumber || 'another desk';
+    const until = existingActiveBooking.endDate || 'active';
+    throw new Error(`Scholar "${bookingData.userName || 'Student'}" already has an active desk assigned (Desk ${desk}, valid until ${until}). A student cannot hold multiple active cabins.`);
+  }
+
+  // 2. Ensure user is created/updated in the users table first
   let userId = bookingData.userId || null;
   let userCode = bookingData.userCode || null;
   let userName = bookingData.userName || 'Scholar';
@@ -100,7 +142,7 @@ export const createBooking = async (bookingData) => {
     console.warn('Unable to sync user record prior to booking creation:', userErr.message);
   }
 
-  // 2. Build booking object linked to the user record
+  // 3. Build booking object linked to the user record
   const newBooking = {
     id: bookingId,
     bookingCode,
@@ -114,7 +156,6 @@ export const createBooking = async (bookingData) => {
   };
 
   // Update local storage for immediate reflection
-  const currentLocal = getLocalBookings();
   const updatedLocal = [newBooking, ...currentLocal.filter(b => b.id !== bookingId)];
   saveLocalBookings(updatedLocal);
 
@@ -243,4 +284,25 @@ export const updateBookingDetails = async (bookingId, updatedFields) => {
     return false;
   }
 };
+export const deleteBooking = async (bookingId) => {
+  const { deleteDoc } = await import('firebase/firestore');
+  const currentLocal = getLocalBookings();
+  const updated = currentLocal.filter(b => b.id !== bookingId);
+  saveLocalBookings(updated);
+  try {
+    await deleteDoc(doc(db, 'bookings', bookingId));
+    return true;
+  } catch (e) {
+    console.warn('Firestore booking delete error:', e.message);
+    return false;
+  }
+};
 
+export const purgeAllBookingsFromFirestore = async () => {
+  const { deleteDoc, getDocs: gds } = await import('firebase/firestore');
+  const snapshot = await gds(collection(db, 'bookings'));
+  const deletes = snapshot.docs.map(d => deleteDoc(doc(db, 'bookings', d.id)));
+  await Promise.all(deletes);
+  saveLocalBookings([]);
+  return snapshot.docs.length;
+};

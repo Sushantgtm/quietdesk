@@ -5,7 +5,7 @@
  * Seeds all Firestore collections with the exact floor layout data:
  *   - 5 Study Zones (matching architectural floor plan)
  *   - 62 Seats across 5 zones (A1-A13, C1-C24, T1-T4, B1-B6, R1-R15)
- *   - 20 Digital Lockers (L-01 to L-20)
+ *   - 20 Key Lockers (L-01 to L-20)
  *   - 6 Sample Users
  *   - Access Plans, Amenities, Branch Info, Admins
  */
@@ -107,21 +107,20 @@ const BOOKINGS = [
 
 // ─── 6. ACCESS PLANS ───
 const PLANS = [
-  { id: 'plan_daily',   name: 'Day Scholar Pass',   price: 500,  originalPrice: 600,  duration: '1 Day',    lockerEligible: false, features: ['Single day access (7AM–10PM)', 'All study zones', 'Artisanal coffee & tea', 'Gigabit fiber Wi-Fi', 'Power outlet at every seat', 'Printing up to 10 pages'] },
-  { id: 'plan_weekly',  name: 'Weekly Scholar Pass', price: 2700, originalPrice: 3500, duration: '7 Days',   lockerEligible: true,  features: ['7 consecutive days (7AM–10PM)', 'All study zones with seat selection', 'Unlimited beverages', 'Gigabit fiber Wi-Fi', 'Optional digital locker (+NPR 300)', 'Printing up to 50 pages', 'Priority seat booking'] },
-  { id: 'plan_monthly', name: 'Monthly Scholar Pass',price: 7500, originalPrice: 9000, duration: '30 Days',  lockerEligible: true,  features: ['30 days unlimited access (7AM–10PM)', 'Dedicated assigned cabin', 'Unlimited coffee, tea & spring water', 'Gigabit fiber Wi-Fi', 'Dedicated digital locker included (+NPR 1000)', 'Unlimited printing & scanning', 'Guest pass (2/month)', 'Monitor pod access'] },
+  { id: 'plan_daily',   name: 'Day Scholar Pass',   price: 500,  originalPrice: 600,  duration: '1 Day',    lockerEligible: false, features: ['Single day access (7AM–10PM)', 'All study zones', 'Gigabit fiber Wi-Fi', 'Power outlet at every seat'] },
+  { id: 'plan_weekly',  name: 'Weekly Scholar Pass', price: 2700, originalPrice: 3500, duration: '7 Days',   lockerEligible: true,  features: ['7 consecutive days (7AM–10PM)', 'All study zones with seat selection', 'Gigabit fiber Wi-Fi', 'Optional key locker available', 'Priority seat booking'] },
+  { id: 'plan_monthly', name: 'Monthly Scholar Pass',price: 7500, originalPrice: 9000, duration: '30 Days',  lockerEligible: true,  features: ['30 days unlimited access (7AM–10PM)', 'Dedicated assigned cabin', 'Gigabit fiber Wi-Fi', 'Dedicated key locker included', 'Guest pass (2/month)'] },
 ];
 
 // ─── 7. AMENITIES ───
 const AMENITIES = [
-  { id: 'amenity_wifi',     iconName: 'Wifi',       title: 'Gigabit Fiber Internet',      desc: 'Dual-band enterprise Wi-Fi with uninterrupted uptime & battery backup.' },
-  { id: 'amenity_power',    iconName: 'Zap',        title: 'Dedicated Power Outlets',     desc: 'Dual AC sockets + USB-C fast charging at every seat.' },
-  { id: 'amenity_beverage', iconName: 'Coffee',     title: 'Artisanal Beverage Bar',      desc: 'Unlimited fresh French press coffee, green tea & filtered spring water.' },
-  { id: 'amenity_lockers',  iconName: 'Lock',       title: 'Private Secure Lockers',      desc: '20 Keyless digital lockers to safely store your books and laptop.' },
-  { id: 'amenity_lighting', iconName: 'Sun',        title: 'Natural & Warm Lighting',     desc: 'Floor-to-ceiling glass windows and individual warm LED lamps.' },
-  { id: 'amenity_print',    iconName: 'Printer',    title: 'Printing & Scanning',         desc: 'High-speed laser printing and document scanning services.' },
-  { id: 'amenity_monitors', iconName: 'Monitor',    title: 'Monitor Pod Options',         desc: 'External 27-inch 4K monitors for programmers and video editors.' },
-  { id: 'amenity_backup',   iconName: 'ShieldAlert',title: '100% Inverter Backup',        desc: 'Kathmandu power cut proof. Automated instant generator backup.' },
+  { id: 'amenity_ac',       iconName: 'Wind',       title: 'AC Available',                desc: 'Fully air-conditioned and climate-controlled rooms for year-round focus.' },
+  { id: 'amenity_quiet',    iconName: 'VolumeX',    title: 'Quiet Environment',           desc: 'Strict acoustic silence discipline enforced across all study zones.' },
+  { id: 'amenity_chair',    iconName: 'Armchair',   title: 'Comfortable Chairs',          desc: 'High-comfort ergonomic chairs designed for long hours of fatigue-free study.' },
+  { id: 'amenity_power',    iconName: 'Zap',        title: 'Charging Plug in Each Seat',  desc: 'Dedicated dual power outlets at every desk for your laptops and devices.' },
+  { id: 'amenity_lockers',  iconName: 'Key',        title: 'Private Key Lockers',         desc: '20 Secure physical key lockers to safely store your books and belongings.' },
+  { id: 'amenity_wifi',     iconName: 'Wifi',       title: 'Gigabit Fiber Internet',      desc: 'Dual-band enterprise Wi-Fi with uninterrupted uptime & speed.' },
+  { id: 'amenity_backup',   iconName: 'ShieldAlert',title: '100% Inverter Backup',        desc: 'Kathmandu power cut proof. Automated instant generator and inverter backup.' },
 ];
 
 // ─── 8. BRANCH ───
@@ -135,7 +134,7 @@ const BRANCH = {
   hours: '7:00 AM - 10:00 PM (Seven days a week)',
   totalCapacity: 62,
   acousticPolicy: 'Strict Silence Enforced in Main Study Zones',
-  facilities: ['Enterprise Wi-Fi', 'Artisanal Coffee Bar', '24/7 Power Backup', 'Ergonomic Desk Stations', '20 Digital Lockers'],
+  facilities: ['Enterprise Wi-Fi', '24/7 Power Backup', 'Ergonomic Desk Stations', '20 Key Lockers'],
 };
 
 // ─── 9. ADMINS ───

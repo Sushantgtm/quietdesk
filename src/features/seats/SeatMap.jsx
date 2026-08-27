@@ -280,13 +280,14 @@ export const SeatMap = () => {
                 </div>
                 <div>
                   <h4 style={{ margin: 0, color: meta.color || 'var(--primary)' }}>{activeModalSeat.zone}</h4>
-                  <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>NPR <strong>{activeModalSeat.pricePerDay}</strong> / day</div>
+                  {/* Price hidden per owner's request — data retained */}
+                  <div style={{ display: 'none', fontSize: '0.875rem', color: 'var(--text-muted)' }}>NPR <strong>{activeModalSeat.pricePerDay}</strong> / day</div>
                 </div>
               </div>
 
               <h5 style={{ marginBottom: '0.75rem', color: 'var(--primary)' }}>Included Amenities:</h5>
               <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 1.5rem 0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {[...(activeModalSeat.amenities || ['Ergonomic Mesh Chair', 'Dedicated Power Outlet', 'High-Speed Wi-Fi']), 'Unlimited French Press Coffee & Tea'].map((item, i) => (
+                {(activeModalSeat.amenities || ['Ergonomic Mesh Chair', 'Dedicated Power Outlet', 'High-Speed Wi-Fi']).map((item, i) => (
                   <li key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
                     <CheckCircle2 size={16} color={meta.accent || 'var(--accent-hover)'} />
                     <span>{item}</span>

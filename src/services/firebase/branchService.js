@@ -11,7 +11,7 @@ export const INITIAL_BRANCH_INFO = {
   hours: '7:00 AM - 10:00 PM (Seven days a week)',
   totalCapacity: 16,
   acousticPolicy: 'Strict Silence Enforced in Main Study Zones',
-  facilities: ['Enterprise Wi-Fi', 'Artisanal Coffee Bar', '24/7 Power Backup', 'Ergonomic Desk Stations']
+  facilities: ['Enterprise Wi-Fi', '24/7 Power Backup', 'Ergonomic Desk Stations']
 };
 
 const LOCAL_STORAGE_BRANCH_KEY = 'quietdesk_branch_v1';

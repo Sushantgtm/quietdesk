@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Sparkles, ArrowRight, ShieldCheck, Clock, Coffee } from 'lucide-react';
+import { Sparkles, ArrowRight, ShieldCheck, Clock } from 'lucide-react';
 
 export const HeroSection = () => {
   return (
@@ -65,10 +65,6 @@ export const HeroSection = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
                 <Clock size={18} color="var(--accent)" />
                 <span>Flexible Hours</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                <Coffee size={18} color="var(--accent)" />
-                <span>Free Artisanal Beverages</span>
               </div>
             </div>
           </div>

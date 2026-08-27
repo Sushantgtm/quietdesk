@@ -2,7 +2,7 @@ import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, getDocs } fr
 import { db } from './firebase';
 import { MOCK_LOCKERS } from '../mock/mockData';
 
-const LOCAL_STORAGE_LOCKERS_KEY = 'quietdesk_lockers_v1';
+const LOCAL_STORAGE_LOCKERS_KEY = 'quietdesk_lockers_v3';
 
 export const getLocalLockers = () => {
   const stored = localStorage.getItem(LOCAL_STORAGE_LOCKERS_KEY);
@@ -26,7 +26,7 @@ export const seedLockersToFirestore = async () => {
     for (const locker of MOCK_LOCKERS) {
       await setDoc(doc(db, 'lockers', locker.id), locker, { merge: true });
     }
-    console.log('Successfully seeded 20 lockers to Firestore');
+    console.log('Successfully seeded 20 lockers (A-T) to Firestore');
   } catch (e) {
     console.warn('Unable to seed Firestore lockers:', e.message);
   }
@@ -37,23 +37,19 @@ export const subscribeLockers = (onLockersUpdate) => {
   try {
     const lockersRef = collection(db, 'lockers');
     unsub = onSnapshot(lockersRef, (snapshot) => {
-      if (snapshot.empty && !localStorage.getItem(LOCAL_STORAGE_LOCKERS_KEY)) {
+      if (snapshot.empty) {
         seedLockersToFirestore();
         onLockersUpdate(getLocalLockers());
-      } else if (!snapshot.empty) {
+      } else {
         const firestoreLockers = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         firestoreLockers.sort((a, b) => {
-          const numA = parseInt((a.lockerNumber || '').replace(/\D/g, ''), 10) || 0;
-          const numB = parseInt((b.lockerNumber || '').replace(/\D/g, ''), 10) || 0;
-          return numA - numB;
+          return (a.lockerNumber || a.label || a.id || '').localeCompare(b.lockerNumber || b.label || b.id || '', undefined, { numeric: true, sensitivity: 'base' });
         });
         saveLocalLockers(firestoreLockers);
         onLockersUpdate(firestoreLockers);
-      } else {
-        onLockersUpdate(getLocalLockers());
       }
     }, (error) => {
-      console.warn('Firestore lockers subscription fallback to local state:', error.message);
+      console.warn('Firestore lockers subscription error, using local fallback:', error.message);
       onLockersUpdate(getLocalLockers());
     });
   } catch (e) {
