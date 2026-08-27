@@ -14,12 +14,52 @@ export const BookingPage = () => {
   const urlSeatId = searchParams.get('seat');
   const urlPlanId = searchParams.get('plan');
 
+  // Helper to format today's local date YYYY-MM-DD
+  const getTodayLocalDateStr = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const todayLocalDate = getTodayLocalDateStr();
+
+  // Helper to compute next 15-minute slot for current local time
+  const getNext15MinSlot = (date = new Date()) => {
+    const d = new Date(date);
+    const remainder = d.getMinutes() % 15;
+    if (remainder !== 0) {
+      d.setMinutes(d.getMinutes() + (15 - remainder));
+    }
+    let hour = d.getHours();
+    const min = d.getMinutes();
+    if (hour < 5) hour = 5;
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+    const displayMin = min < 10 ? `0${min}` : min;
+    return `${displayHour < 10 ? '0' + displayHour : displayHour}:${displayMin} ${period}`;
+  };
+
+  // Convert "HH:MM AM/PM" to minutes from midnight
+  const parseTimeToMinutes = (timeStr) => {
+    if (!timeStr) return 0;
+    const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!match) return 0;
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    const period = match[3].toUpperCase();
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    return hours * 60 + minutes;
+  };
+
   const [step, setStep] = useState(1);
   const [selectedSeatId, setSelectedSeatId] = useState(urlSeatId || '');
   const [selectedPassType, setSelectedPassType] = useState(urlPlanId ? urlPlanId.toUpperCase() : 'DAILY');
   const [includeLocker, setIncludeLocker] = useState(false);
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [arrivalTime, setArrivalTime] = useState('07:00 AM');
+  const [startDate, setStartDate] = useState(todayLocalDate);
+  const [arrivalTime, setArrivalTime] = useState(getNext15MinSlot());
   const [customArrivalTime, setCustomArrivalTime] = useState('');
   const [isCustomTime, setIsCustomTime] = useState(false);
   const [formData, setFormData] = useState({
@@ -30,10 +70,10 @@ export const BookingPage = () => {
   const [confirmedBooking, setConfirmedBooking] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Generate 15-minute time slots from 06:00 AM to 10:00 PM
-  const timeSlots = useMemo(() => {
+  // Generate 15-minute time slots from 05:00 AM to 10:00 PM
+  const allTimeSlots = useMemo(() => {
     const slots = [];
-    for (let hour = 6; hour <= 22; hour++) {
+    for (let hour = 5; hour <= 22; hour++) {
       for (let min = 0; min < 60; min += 15) {
         if (hour === 22 && min > 0) break; // Stop at 10:00 PM
         const period = hour >= 12 ? 'PM' : 'AM';
@@ -44,6 +84,36 @@ export const BookingPage = () => {
     }
     return slots;
   }, []);
+
+  // Filter time slots if selected date is today (prevent booking past times)
+  const availableTimeSlots = useMemo(() => {
+    if (startDate !== todayLocalDate) {
+      return allTimeSlots;
+    }
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const valid = allTimeSlots.filter(slot => {
+      const slotMinutes = parseTimeToMinutes(slot);
+      return slotMinutes >= currentMinutes;
+    });
+
+    return valid.length > 0 ? valid : [allTimeSlots[allTimeSlots.length - 1]];
+  }, [startDate, todayLocalDate, allTimeSlots]);
+
+  // Keep arrivalTime synchronized to valid available slot
+  useEffect(() => {
+    if (startDate === todayLocalDate) {
+      const nextSlot = getNext15MinSlot();
+      if (availableTimeSlots.includes(nextSlot)) {
+        setArrivalTime(nextSlot);
+      } else if (availableTimeSlots.length > 0 && !availableTimeSlots.includes(arrivalTime)) {
+        setArrivalTime(availableTimeSlots[0]);
+      }
+    } else if (!availableTimeSlots.includes(arrivalTime) && availableTimeSlots.length > 0) {
+      setArrivalTime(availableTimeSlots[0]);
+    }
+  }, [startDate, availableTimeSlots]);
 
   useEffect(() => {
     if (urlSeatId && !selectedSeatId) {
@@ -82,6 +152,22 @@ export const BookingPage = () => {
     if (step === 1 && (!selectedSeatObj || selectedSeatObj.status !== 'AVAILABLE')) {
       alert('Please select an available desk to proceed.');
       return;
+    }
+    if (step === 2) {
+      if (startDate < todayLocalDate) {
+        alert('Reservation date cannot be in the past. Please select today or a future date.');
+        return;
+      }
+      if (startDate === todayLocalDate) {
+        const timeToValidate = isCustomTime ? customArrivalTime : arrivalTime;
+        const selectedMins = parseTimeToMinutes(timeToValidate);
+        const currentNow = new Date();
+        const currentMins = currentNow.getHours() * 60 + currentNow.getMinutes();
+        if (selectedMins < currentMins) {
+          alert(`Expected arrival time cannot be in the past for today. Please select a time slot from ${availableTimeSlots[0]} onwards.`);
+          return;
+        }
+      }
     }
     setStep(step + 1);
   };
@@ -471,7 +557,7 @@ export const BookingPage = () => {
                       <input
                         type="date"
                         required
-                        min={new Date().toISOString().split('T')[0]}
+                        min={todayLocalDate}
                         value={startDate}
                         onChange={(e) => setStartDate(e.target.value)}
                         style={{
@@ -536,16 +622,20 @@ export const BookingPage = () => {
                             cursor: 'pointer'
                           }}
                         >
-                          {timeSlots.map((slot) => (
+                          {availableTimeSlots.map((slot) => (
                             <option key={slot} value={slot}>
-                              {slot} {slot === '06:00 AM' ? '(Opening)' : slot === '10:00 PM' ? '(Closing)' : ''}
+                              {slot} {slot === '05:00 AM' || slot === '06:00 AM' ? '(Opening)' : slot === '10:00 PM' ? '(Closing)' : ''}
                             </option>
                           ))}
                         </select>
                       )}
                     </div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                      Operating hours: 06:00 AM – 10:00 PM (15 min increments)
+                      {startDate === todayLocalDate ? (
+                        <span>Showing real-time slots available from <strong>{availableTimeSlots[0]}</strong> onward today.</span>
+                      ) : (
+                        <span>Operating hours: 05:00 AM – 10:00 PM (15 min increments)</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -793,19 +883,10 @@ export const BookingPage = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-                <Link to="/" className="btn btn-outline">
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <Link to="/" className="btn btn-primary" style={{ padding: '0.85rem 2.75rem', fontSize: '1rem' }}>
                   Return to Home
                 </Link>
-                <button
-                  onClick={() => {
-                    setStep(1);
-                    setConfirmedBooking(null);
-                  }}
-                  className="btn btn-primary"
-                >
-                  Reserve Another Seat
-                </button>
               </div>
             </div>
           )}
