@@ -86,10 +86,9 @@ export const BookingPage = () => {
     setStep(step + 1);
   };
 
-  const handleConfirmBooking = async (mode = 'BOOK') => {
+  const handleConfirmBooking = async () => {
     setSubmitting(true);
     try {
-      const status = mode === 'BOOK' ? 'CONFIRMED' : 'PENDING_CONFIRMATION';
       const booking = await createBooking({
         seatId: selectedSeatObj.id,
         seatNumber: selectedSeatObj.seatNumber,
@@ -105,13 +104,13 @@ export const BookingPage = () => {
         userEmail: formData.userEmail,
         userPhone: formData.userPhone,
         totalAmount: calculateTotal(),
-        status,
+        status: 'PENDING_CONFIRMATION',
         bookingType: 'WEBSITE_BOOKING'
       });
       setConfirmedBooking(booking);
       setStep(4);
     } catch (err) {
-      alert('Error creating booking: ' + err.message);
+      alert('Error submitting reservation request: ' + err.message);
     } finally {
       setSubmitting(false);
     }
@@ -563,12 +562,12 @@ export const BookingPage = () => {
             </form>
           )}
 
-          {/* Step 3: Review & Pay */}
+          {/* Step 3: Review & Request */}
           {step === 3 && (
             <div className="card" style={{ padding: '2.5rem' }}>
-              <h2 style={{ marginBottom: '0.5rem' }}>Review Reservation</h2>
+              <h2 style={{ marginBottom: '0.5rem' }}>Review & Send Request</h2>
               <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>
-                Confirm your details before locking in your desk.
+                Review your details and submit a reservation request. Our team will confirm your desk within a few hours.
               </p>
 
               <div style={{
@@ -643,24 +642,14 @@ export const BookingPage = () => {
                 <button onClick={() => setStep(2)} className="btn btn-outline" disabled={submitting}>
                   <ArrowLeft size={16} /> Back
                 </button>
-                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                  <button
-                    onClick={() => handleConfirmBooking('RESERVE')}
-                    className="btn btn-outline"
-                    disabled={submitting}
-                    style={{ borderColor: 'var(--accent)', color: 'var(--primary)', fontWeight: 700 }}
-                  >
-                    🟡 Reserve Desk Request
-                  </button>
-                  <button
-                    onClick={() => handleConfirmBooking('BOOK')}
-                    className="btn btn-primary"
-                    disabled={submitting}
-                    style={{ padding: '0.875rem 2.25rem' }}
-                  >
-                    {submitting ? 'Processing...' : '🟢 Book Cabin Now'}
-                  </button>
-                </div>
+                <button
+                  onClick={handleConfirmBooking}
+                  className="btn btn-primary"
+                  disabled={submitting}
+                  style={{ padding: '0.875rem 2.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  {submitting ? 'Submitting Request...' : <><Ticket size={18} /> Send Reservation Request</>}
+                </button>
               </div>
             </div>
           )}
@@ -682,10 +671,11 @@ export const BookingPage = () => {
                 <Ticket size={36} />
               </div>
 
-              <h2 style={{ color: 'var(--primary)', marginBottom: '0.5rem' }}>Reservation Submitted!</h2>
+              <h2 style={{ color: 'var(--primary)', marginBottom: '0.5rem' }}>Request Submitted!</h2>
               <p style={{ color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-                Your desk request has been received and is <strong>awaiting admin confirmation</strong>.
-                You'll be notified once the branch manager confirms your booking.
+                Your reservation request has been received. Our team will review it and
+                <strong> confirm your desk assignment</strong> — typically within a few hours.
+                Please visit our reception with your reference code on the reserved date.
               </p>
               <div style={{
                 display: 'inline-block',
