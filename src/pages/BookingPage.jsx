@@ -804,7 +804,7 @@ export const BookingPage = () => {
                   }}
                   className="btn btn-primary"
                 >
-                  Book Another Seat
+                  Reserve Another Seat
                 </button>
               </div>
             </div>

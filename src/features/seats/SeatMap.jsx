@@ -298,7 +298,7 @@ export const SeatMap = () => {
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', borderTop: '1px solid var(--border-subtle)', paddingTop: '1.25rem' }}>
                 <button onClick={() => setActiveModalSeat(null)} className="btn btn-outline">Cancel</button>
                 <button onClick={handleConfirmSeatSelection} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <UserCheck size={18} /> Continue to Booking
+                  <UserCheck size={18} /> Continue to Reservation
                 </button>
               </div>
             </div>

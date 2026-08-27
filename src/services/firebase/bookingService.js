@@ -120,26 +120,29 @@ export const createBooking = async (bookingData) => {
   let userCode = bookingData.userCode || null;
   let userName = bookingData.userName || 'Scholar';
 
-  try {
-    const studentRes = await findOrCreateStudent({
-      fullName: bookingData.userName || 'Scholar',
-      name: bookingData.userName || 'Scholar',
-      email: bookingData.userEmail || '',
-      phone: bookingData.userPhone || '',
-      passType: bookingData.passType || 'DAILY',
-      assignedSeat: bookingData.seatNumber ? `Desk ${bookingData.seatNumber}` : '',
-      seatNumber: bookingData.seatNumber || '',
-      status: 'ACTIVE',
-      membershipStatus: 'ACTIVE'
-    });
+  // Only call findOrCreateStudent if no userId was provided AND real student info is present
+  if (!userId && (bookingData.userPhone || bookingData.userEmail || (bookingData.userName && bookingData.userName.trim() !== '' && bookingData.userName.trim() !== 'Scholar'))) {
+    try {
+      const studentRes = await findOrCreateStudent({
+        fullName: bookingData.userName || 'Scholar',
+        name: bookingData.userName || 'Scholar',
+        email: bookingData.userEmail || '',
+        phone: bookingData.userPhone || '',
+        passType: bookingData.passType || 'DAILY',
+        assignedSeat: bookingData.seatNumber ? `Desk ${bookingData.seatNumber}` : '',
+        seatNumber: bookingData.seatNumber || '',
+        status: 'ACTIVE',
+        membershipStatus: 'ACTIVE'
+      });
 
-    if (studentRes && studentRes.user) {
-      userId = studentRes.user.id;
-      userCode = studentRes.user.userCode;
-      userName = studentRes.user.fullName || studentRes.user.name || userName;
+      if (studentRes && studentRes.user) {
+        userId = studentRes.user.id;
+        userCode = studentRes.user.userCode;
+        userName = studentRes.user.fullName || studentRes.user.name || userName;
+      }
+    } catch (userErr) {
+      console.warn('Unable to sync user record prior to booking creation:', userErr.message);
     }
-  } catch (userErr) {
-    console.warn('Unable to sync user record prior to booking creation:', userErr.message);
   }
 
   // 3. Build booking object linked to the user record

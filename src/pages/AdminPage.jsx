@@ -1974,7 +1974,7 @@ export const AdminPage = () => {
                                 onClick={() => {
                                   const targetSeat = seats.find(s => s.seatNumber === activeBookingForUser.seatNumber || s.id === activeBookingForUser.seatId) || { seatNumber: activeBookingForUser.seatNumber, zone: activeBookingForUser.zone || 'Zone A' };
                                   setSelectedSeatForCabinModal(targetSeat);
-                                  setShowCabinModal(true);
+                                  setShowCabinStudentModal(true);
                                 }}
                                 title={`Currently occupying Desk ${activeBookingForUser.seatNumber}`}
                                 style={{
@@ -3823,117 +3823,33 @@ export const AdminPage = () => {
       )}
 
       {/* ==================== MODAL 2: USER PROFILE & HISTORY ==================== */}
-      {selectedUserForProfile && (
-        <div style={{
-          position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem'
-        }}>
-          <div style={{
-            backgroundColor: '#FFFFFF', borderRadius: '16px', width: '100%', maxWidth: '680px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', overflow: 'hidden', maxHeight: '90vh', display: 'flex', flexDirection: 'column'
-          }}>
-            <div style={{ padding: '1.25rem 1.5rem', backgroundColor: '#0F172A', color: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#D97706', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>
-                  {selectedUserForProfile.fullName ? selectedUserForProfile.fullName.charAt(0) : 'U'}
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>{selectedUserForProfile.fullName}</h3>
-                  <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>ID: {selectedUserForProfile.userCode || selectedUserForProfile.id}</div>
-                </div>
-              </div>
-              <button onClick={() => setSelectedUserForProfile(null)} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '0.2rem' }}>
-                <X size={20} />
-              </button>
-            </div>
-
-            <div style={{ padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              {/* Personal Details */}
-              <div style={{ backgroundColor: '#F8FAFC', padding: '1rem 1.25rem', borderRadius: '10px', border: '1px solid #E2E8F0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', fontSize: '0.85rem' }}>
-                <div><strong>Email:</strong> {selectedUserForProfile.email}</div>
-                <div><strong>Phone:</strong> {selectedUserForProfile.phone}</div>
-                <div><strong>Current Pass:</strong> <span style={{ fontWeight: 700, color: '#D97706' }}>{selectedUserForProfile.passType}</span></div>
-                <div><strong>Membership Status:</strong> <span style={{ fontWeight: 700, color: '#059669' }}>{selectedUserForProfile.membershipStatus}</span></div>
-                <div><strong>Joined Date:</strong> {selectedUserForProfile.joinedDate ? new Date(selectedUserForProfile.joinedDate).toLocaleDateString() : 'N/A'}</div>
-                <div><strong>Emergency Contact:</strong> {selectedUserForProfile.emergencyContact || 'N/A'}</div>
-              </div>
-
-              {/* Booking History Ledger for this user */}
-              <div>
-                <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem', fontWeight: 800, color: '#0F172A' }}>Reservation & Booking History</h4>
-                {userBookingsHistory.length === 0 ? (
-                  <div style={{ fontSize: '0.85rem', color: '#94A3B8', fontStyle: 'italic', padding: '1rem', textAlign: 'center', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
-                    No bookings found for this user.
-                  </div>
-                ) : (
-                  <div style={{ border: '1px solid #E2E8F0', borderRadius: '8px', overflow: 'hidden' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
-                      <thead>
-                        <tr style={{ backgroundColor: '#F1F5F9', color: '#475569' }}>
-                          <th style={{ padding: '0.6rem 0.85rem' }}>Code</th>
-                          <th style={{ padding: '0.6rem 0.85rem' }}>Desk</th>
-                          <th style={{ padding: '0.6rem 0.85rem' }}>Pass</th>
-                          <th style={{ padding: '0.6rem 0.85rem' }}>Shift / Time</th>
-                          <th style={{ padding: '0.6rem 0.85rem' }}>Amount</th>
-                          <th style={{ padding: '0.6rem 0.85rem' }}>Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {userBookingsHistory.map(b => (
-                          <tr key={b.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                            <td style={{ padding: '0.6rem 0.85rem', fontWeight: 700 }}>{b.bookingCode}</td>
-                            <td style={{ padding: '0.6rem 0.85rem', fontWeight: 800, color: '#2563EB' }}>{b.seatNumber}</td>
-                            <td style={{ padding: '0.6rem 0.85rem' }}>{b.passType}</td>
-                            <td style={{ padding: '0.6rem 0.85rem', color: '#64748B' }}>{b.shift || 'FULL_DAY'}</td>
-                            <td style={{ padding: '0.6rem 0.85rem', fontWeight: 700 }}>NPR {b.totalAmount}</td>
-                            <td style={{ padding: '0.6rem 0.85rem' }}>
-                              <span style={{
-                                padding: '0.15rem 0.4rem', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 700,
-                                backgroundColor: b.status === 'CONFIRMED' || b.status === 'CHECKED_IN' ? '#ECFDF5' : '#FEF3C7',
-                                color: b.status === 'CONFIRMED' || b.status === 'CHECKED_IN' ? '#047857' : '#B45309'
-                              }}>
-                                {b.status}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              {/* Financial Spend Summary */}
-              <div style={{ backgroundColor: '#EFF6FF', padding: '1rem', borderRadius: '10px', border: '1px solid #BFDBFE', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontSize: '0.8rem', color: '#1E40AF', fontWeight: 600 }}>Lifetime Total Revenue from Member</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1E3A8A' }}>
-                    NPR {userBookingsHistory.reduce((sum, b) => sum + (b.totalAmount || 0), 0).toLocaleString()}
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    const u = selectedUserForProfile;
-                    setSelectedUserForProfile(null);
-                    setReservationForm(prev => ({
-                      ...prev,
-                      userId: u.id,
-                      userName: u.fullName,
-                      userEmail: u.email,
-                      userPhone: u.phone,
-                      passType: u.passType || 'DAILY'
-                    }));
-                    setShowReservationModal(true);
-                  }}
-                  style={{ backgroundColor: '#2563EB', color: '#FFFFFF', border: 'none', borderRadius: '8px', padding: '0.55rem 1rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}
-                >
-                  + New Reservation
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <StudentProfileModal
+        user={selectedUserForProfile}
+        bookings={bookings}
+        lockers={lockers}
+        seats={seats}
+        onClose={() => setSelectedUserForProfile(null)}
+        onNewReservation={(u) => {
+          setSelectedUserForProfile(null);
+          setReservationForm(prev => ({
+            ...prev,
+            userId: u.id,
+            userName: u.fullName || u.name,
+            userEmail: u.email,
+            userPhone: u.phone,
+            passType: u.passType || 'DAILY'
+          }));
+          setShowReservationModal(true);
+        }}
+        onCollectDue={(bookingObj) => {
+          handleOpenRecordPaymentModal(bookingObj);
+        }}
+        onEditUser={(u) => {
+          setEditingUser(u);
+          setEditUserForm({ ...u });
+          setShowEditUserModal(true);
+        }}
+      />
 
       {/* ==================== MODAL 3: ADMIN MAKE RESERVATION ==================== */}
       {showReservationModal && (
@@ -5301,6 +5217,27 @@ export const AdminPage = () => {
             );
             if (activeBooking) {
               await changeBookingStatus(activeBooking.id, seat.id, 'COMPLETED');
+              await changeSeatStatus(seat.id, 'AVAILABLE');
+
+              // Automatically mark user INACTIVE if they have no other active bookings
+              if (activeBooking.userId) {
+                const todayCheckStr = new Date().toISOString().split('T')[0];
+                const hasOtherActive = bookings.some(other =>
+                  other.id !== activeBooking.id &&
+                  (other.userId === activeBooking.userId || (other.userPhone && activeBooking.userPhone && other.userPhone.replace(/\D/g, '') === activeBooking.userPhone.replace(/\D/g, ''))) &&
+                  !['CANCELLED', 'COMPLETED'].includes(other.status) &&
+                  (!other.endDate || other.endDate >= todayCheckStr)
+                );
+                if (!hasOtherActive) {
+                  await updateUser(activeBooking.userId, {
+                    membershipStatus: 'INACTIVE',
+                    status: 'INACTIVE',
+                    assignedSeat: '',
+                    seatNumber: ''
+                  });
+                }
+              }
+
               // Also release any locker assigned to this booking
               if (activeBooking.lockerNumber) {
                 const matchingLocker = lockers.find(l => l.lockerNumber === activeBooking.lockerNumber);
@@ -5311,7 +5248,7 @@ export const AdminPage = () => {
             } else {
               await changeSeatStatus(seat.id, 'AVAILABLE');
             }
-            alert(`✅ Desk #${seat.seatNumber} is now AVAILABLE.`);
+            alert(`✅ Desk #${seat.seatNumber} is now AVAILABLE and occupant marked INACTIVE.`);
           } catch (err) {
             console.error('Error releasing cabin:', err);
             alert('Failed to release cabin: ' + err.message);
