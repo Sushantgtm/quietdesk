@@ -32,8 +32,8 @@ export const HeroSection = () => {
             </div>
 
             <h1 style={{ marginBottom: '1.25rem' }}>
-              Silence, <br />
-              <span style={{ color: 'var(--accent)', fontStyle: 'italic' }}>by design.</span>
+              Less noise, <br />
+              <span style={{ color: 'var(--accent)', fontStyle: 'italic' }}>more progress.</span>
             </h1>
 
             <p style={{ fontSize: '1.125rem', marginBottom: '2rem', maxWidth: '520px', lineHeight: 1.7 }}>

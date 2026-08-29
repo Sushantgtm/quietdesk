@@ -1,9 +1,8 @@
-import { collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase';
 
 export const INITIAL_AMENITIES = [
   { id: 'amenity_ac', iconName: 'Wind', title: 'AC Available', desc: 'Fully air-conditioned and climate-controlled rooms for year-round focus.' },
-  { id: 'amenity_quiet', iconName: 'VolumeX', title: 'Quiet Environment', desc: 'Strict acoustic silence discipline enforced across all study zones.' },
   { id: 'amenity_chair', iconName: 'Armchair', title: 'Comfortable Chairs', desc: 'High-comfort ergonomic chairs designed for long hours of fatigue-free study.' },
   { id: 'amenity_power', iconName: 'Zap', title: 'Charging Plug in Each Seat', desc: 'Dedicated dual power outlets at every desk for your laptops and devices.' },
   { id: 'amenity_lockers', iconName: 'Key', title: 'Private Key Lockers', desc: 'Physical key-operated secure lockers to safely store your books and belongings.' },
@@ -71,3 +70,51 @@ export const subscribeAmenities = (onAmenitiesUpdate) => {
     window.removeEventListener('storage', handleLocalChange);
   };
 };
+
+export const createAmenityInFirestore = async (amenityData) => {
+  const id = amenityData.id || `amenity_${Date.now()}`;
+  const newAmenity = { ...amenityData, id };
+
+  const currentLocal = getLocalAmenities();
+  const updatedLocal = [...currentLocal, newAmenity];
+  saveLocalAmenities(updatedLocal);
+
+  try {
+    await setDoc(doc(db, 'amenities', id), newAmenity, { merge: true });
+    return newAmenity;
+  } catch (e) {
+    console.warn('Firestore createAmenity fallback to local:', e.message);
+    return newAmenity;
+  }
+};
+
+export const updateAmenityInFirestore = async (id, updatedFields) => {
+  const currentLocal = getLocalAmenities();
+  const updatedLocal = currentLocal.map(a => a.id === id ? { ...a, ...updatedFields } : a);
+  saveLocalAmenities(updatedLocal);
+
+  try {
+    const ref = doc(db, 'amenities', id);
+    await updateDoc(ref, { ...updatedFields, updatedAt: new Date().toISOString() });
+    return true;
+  } catch (e) {
+    console.warn('Firestore updateAmenity fallback to local:', e.message);
+    return false;
+  }
+};
+
+export const deleteAmenityFromFirestore = async (id) => {
+  const currentLocal = getLocalAmenities();
+  const updatedLocal = currentLocal.filter(a => a.id !== id);
+  saveLocalAmenities(updatedLocal);
+
+  try {
+    const ref = doc(db, 'amenities', id);
+    await deleteDoc(ref);
+    return true;
+  } catch (e) {
+    console.warn('Firestore deleteAmenity fallback to local:', e.message);
+    return false;
+  }
+};
+

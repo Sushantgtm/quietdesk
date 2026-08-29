@@ -3,11 +3,12 @@ import { subscribeSeatAvailability, updateSeatStatusInFirestore, updateSeatDetai
 import { subscribeBookings, createBooking as createBookingService, updateBookingStatus, confirmBooking as confirmBookingService, updateBookingPaymentStatus, updateBookingDetails as updateBookingDetailsService } from '../services/firebase/bookingService';
 import { subscribePlans, createPlan as createPlanService, updatePlan as updatePlanService, deletePlan as deletePlanService } from '../services/firebase/pricingService';
 import { subscribeUsers, createUser as createUserService, updateUser as updateUserService, findOrCreateStudent as findOrCreateStudentService } from '../services/firebase/userService';
-import { subscribeAmenities } from '../services/firebase/amenityService';
+import { subscribeAmenities, createAmenityInFirestore, updateAmenityInFirestore, deleteAmenityFromFirestore } from '../services/firebase/amenityService';
 import { subscribeBranchInfo } from '../services/firebase/branchService';
 import { subscribeZones, createZoneInFirestore, updateZoneInFirestore, deleteZoneInFirestore, resetAndSeedZonesInFirestore, INITIAL_ZONES } from '../services/firebase/zoneService';
 import { subscribeLockers, assignLockerInFirestore, releaseLockerInFirestore, updateLockerStatusInFirestore, createLockerInFirestore } from '../services/firebase/lockerService';
 import { ACCESS_PLANS, MOCK_SEATS, MOCK_LOCKERS } from '../services/mock/mockData';
+import { subscribeFaqs, createFaqInFirestore, updateFaqInFirestore, deleteFaqFromFirestore } from '../services/firebase/faqService';
 
 const BookingContext = createContext();
 
@@ -18,6 +19,7 @@ export const BookingProvider = ({ children }) => {
   const [users, setUsers] = useState([]);
   const [plans, setPlans] = useState(ACCESS_PLANS);
   const [amenities, setAmenities] = useState([]);
+  const [faqs, setFaqs] = useState([]);
   const [zones, setZones] = useState([]);
   const [branchInfo, setBranchInfo] = useState(null);
   const [selectedSeat, setSelectedSeat] = useState(null);
@@ -55,6 +57,10 @@ export const BookingProvider = ({ children }) => {
       setAmenities(updatedAmenities);
     });
 
+    const unsubFaqs = subscribeFaqs((updatedFaqs) => {
+      setFaqs(updatedFaqs);
+    });
+
     const unsubBranch = subscribeBranchInfo((updatedBranch) => {
       setBranchInfo(updatedBranch);
     });
@@ -70,6 +76,7 @@ export const BookingProvider = ({ children }) => {
       unsubUsers();
       unsubPlans();
       unsubAmenities();
+      unsubFaqs();
       if (typeof unsubBranch === 'function') unsubBranch();
       if (typeof unsubZones === 'function') unsubZones();
     };
@@ -232,6 +239,64 @@ export const BookingProvider = ({ children }) => {
     return await deletePlanService(planId);
   };
 
+  // Amenities CMS
+  const createAmenity = async (amenityData) => {
+    const newAmenity = await createAmenityInFirestore(amenityData);
+    if (newAmenity) {
+      setAmenities(prev => {
+        const exists = prev.some(a => a.id === newAmenity.id);
+        if (exists) return prev.map(a => a.id === newAmenity.id ? newAmenity : a);
+        return [...prev, newAmenity];
+      });
+    }
+    return newAmenity;
+  };
+
+  const updateAmenity = async (id, updatedFields) => {
+    const success = await updateAmenityInFirestore(id, updatedFields);
+    if (success) {
+      setAmenities(prev => prev.map(a => a.id === id ? { ...a, ...updatedFields } : a));
+    }
+    return success;
+  };
+
+  const deleteAmenity = async (id) => {
+    const success = await deleteAmenityFromFirestore(id);
+    if (success) {
+      setAmenities(prev => prev.filter(a => a.id !== id));
+    }
+    return success;
+  };
+
+  // FAQs CMS
+  const createFaq = async (faqData) => {
+    const newFaq = await createFaqInFirestore(faqData);
+    if (newFaq) {
+      setFaqs(prev => {
+        const exists = prev.some(f => f.id === newFaq.id);
+        if (exists) return prev.map(f => f.id === newFaq.id ? newFaq : f);
+        return [...prev, newFaq];
+      });
+    }
+    return newFaq;
+  };
+
+  const updateFaq = async (id, updatedFields) => {
+    const success = await updateFaqInFirestore(id, updatedFields);
+    if (success) {
+      setFaqs(prev => prev.map(f => f.id === id ? { ...f, ...updatedFields } : f));
+    }
+    return success;
+  };
+
+  const deleteFaq = async (id) => {
+    const success = await deleteFaqFromFirestore(id);
+    if (success) {
+      setFaqs(prev => prev.filter(f => f.id !== id));
+    }
+    return success;
+  };
+
   return (
     <BookingContext.Provider
       value={{
@@ -241,6 +306,7 @@ export const BookingProvider = ({ children }) => {
         users,
         plans,
         amenities,
+        faqs,
         zones,
         branchInfo,
         selectedSeat,
@@ -272,7 +338,13 @@ export const BookingProvider = ({ children }) => {
         findOrCreateStudent: findOrCreateStudentService,
         createPlan,
         updatePlan,
-        deletePlan
+        deletePlan,
+        createAmenity,
+        updateAmenity,
+        deleteAmenity,
+        createFaq,
+        updateFaq,
+        deleteFaq
       }}
     >
       {children}

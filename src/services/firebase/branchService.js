@@ -6,7 +6,7 @@ export const INITIAL_BRANCH_INFO = {
   name: 'The Quiet Desk - Lazimpat Main Branch',
   city: 'Kathmandu',
   address: 'Lazimpat Road (Near Standard Chartered Bank), Kathmandu 44600',
-  phone: '+977 9841234567',
+  phone: '+977 9864826810',
   email: 'lazimpat@quietdesk.np',
   hours: '7:00 AM - 10:00 PM (Seven days a week)',
   totalCapacity: 16,

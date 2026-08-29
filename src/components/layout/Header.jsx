@@ -32,6 +32,7 @@ export const Header = () => {
     { label: 'Amenities', anchor: '#features' },
     { label: 'Seat Map', anchor: '#seats' },
     { label: 'Pricing', anchor: '#pricing' },
+    { label: 'FAQ', anchor: '#faq' }
   ];
 
   return (
@@ -175,7 +176,7 @@ export const Header = () => {
                 textTransform: 'uppercase',
                 fontWeight: 600
               }}>
-                Kathmandu · Silence, by design.
+                Kathmandu · Less noise, more progress.
               </div>
             </div>
           </Link>

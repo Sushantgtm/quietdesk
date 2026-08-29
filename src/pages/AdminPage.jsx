@@ -8,7 +8,7 @@ import {
   UserCheck, AlertCircle, Clock, TrendingUp, CreditCard, ChevronDown, Check, X,
   Users, UserPlus, Package, Edit, Edit3, Plus, Eye, Trash2, Lock, Tag, XCircle, Phone, Mail, User,
   PlusCircle, Sparkles, Layers, Sliders, MapPin, FileText, CheckCircle, Printer, Copy, AlertTriangle,
-  Compass, DoorOpen, Bookmark
+  Compass, DoorOpen, Bookmark, RotateCcw, FolderArchive
 } from 'lucide-react';
 import { seedAllCollectionsToFirestore } from '../services/firebase/seedService';
 import { deleteUser as deleteUserFromFirestore, purgeAllUsersFromFirestore } from '../services/firebase/userService';
@@ -24,13 +24,15 @@ import { ReservationConfirmModal } from '../components/admin/ReservationConfirmM
 export const AdminPage = () => {
   const { isAuthenticated, logout, admin } = useAuth();
   const { 
-    seats, lockers, bookings, users, plans, zones,
+    seats, lockers, bookings, users, plans, zones, amenities, faqs,
     changeSeatStatus, changeBookingStatus, changePaymentStatus, 
     loadingBookings, loadingUsers, confirmBooking,
     createUser, updateUser, createPlan, updatePlan, deletePlan, 
     createBooking, updateBookingDetails, createSeat, updateSeatDetails, deleteSeat,
     createZone, updateZoneDetails, deleteZone, resetAndSeedZones, findOrCreateStudent,
-    assignLocker, releaseLocker, updateLockerStatus, createLocker
+    assignLocker, releaseLocker, updateLockerStatus, createLocker,
+    createAmenity, updateAmenity, deleteAmenity,
+    createFaq, updateFaq, deleteFaq
   } = useBooking();
   const navigate = useNavigate();
 
@@ -55,6 +57,7 @@ export const AdminPage = () => {
   // Modal States
   const [selectedUserForProfile, setSelectedUserForProfile] = useState(null);
   const [showRegisterUserModal, setShowRegisterUserModal] = useState(false);
+  const [showDeletedUsersModal, setShowDeletedUsersModal] = useState(false);
   const [showEditUserModal, setShowEditUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [editUserForm, setEditUserForm] = useState({});
@@ -96,6 +99,16 @@ export const AdminPage = () => {
 
   // Dashboard: Session Expiry Popup Modal
   const [showSessionExpiryPopup, setShowSessionExpiryPopup] = useState(false);
+
+  // CMS Section States
+  const [cmsSubTab, setCmsSubTab] = useState('AMENITIES'); // 'AMENITIES' | 'FAQS'
+  const [showAmenityModal, setShowAmenityModal] = useState(false);
+  const [editingAmenity, setEditingAmenity] = useState(null);
+  const [amenityForm, setAmenityForm] = useState({ id: '', iconName: 'Armchair', title: '', desc: '' });
+
+  const [showFaqModal, setShowFaqModal] = useState(false);
+  const [editingFaq, setEditingFaq] = useState(null);
+  const [faqForm, setFaqForm] = useState({ id: '', question: '', answer: '', order: 1 });
 
   // Manage Desk & Zone Navigation - LAYOUT is 1st default, STATIONS is 2nd, ZONES is 3rd, CREATE_STATION is 4th
   const [desksSubTab, setDesksSubTab] = useState('LAYOUT'); // 'LAYOUT' | 'STATIONS' | 'ZONES' | 'CREATE_STATION'
@@ -186,7 +199,7 @@ export const AdminPage = () => {
   const [showPackageModal, setShowPackageModal] = useState(false);
   const [editingPackage, setEditingPackage] = useState(null);
   const [packageForm, setPackageForm] = useState({
-    id: '', name: '', price: '', originalPrice: '', duration: '', lockerEligible: true, features: ''
+    id: '', name: '', price: '', originalPrice: '', duration: '', lockerEligible: true, features: '', popular: false
   });
 
   // Dedicated Add Station Page States
@@ -384,6 +397,24 @@ export const AdminPage = () => {
   const handleAdminReservationSubmit = async (e, mode = 'CONFIRMED') => {
     if (e && e.preventDefault) e.preventDefault();
     try {
+      // 1. Strict validation: Do not allow blank submissions or placeholder "Scholar" names
+      const memberName = (reservationForm.userName || '').trim();
+      const memberPhone = (reservationForm.userPhone || '').trim();
+      const memberEmail = (reservationForm.userEmail || '').trim();
+
+      if (!memberName || memberName.toLowerCase() === 'scholar') {
+        alert('⚠️ Please enter a valid Member Name before creating a reservation or booking.');
+        return;
+      }
+      if (!memberPhone && !memberEmail) {
+        alert('⚠️ Please provide at least a Phone Number or Email Address for the member.');
+        return;
+      }
+      if (!reservationForm.seatId) {
+        alert('⚠️ Please choose an available station / desk.');
+        return;
+      }
+
       const selectedSeatObj = seats.find(s => s.id === reservationForm.seatId);
       const feeInfo = calculateFee({
         passType: reservationForm.passType,
@@ -430,6 +461,9 @@ export const AdminPage = () => {
 
       await createBooking({
         ...reservationForm,
+        userName: memberName,
+        userPhone: memberPhone,
+        userEmail: memberEmail,
         seatNumber: selectedSeatObj ? selectedSeatObj.seatNumber : reservationForm.seatNumber,
         bookingCode: `QD-MAN-${Math.floor(1000 + Math.random() * 9000)}`,
         status: bookingStatus,
@@ -455,6 +489,69 @@ export const AdminPage = () => {
     } catch (err) {
       console.error('Error creating booking/reservation:', err);
       alert('Error: ' + err.message);
+    }
+  };
+
+  // --- User Deletion and Recycle Bin Handlers ---
+  const handleDeleteUser = async (user) => {
+    if (!user) return;
+    const name = user.fullName || user.name || user.id;
+    if (!window.confirm(`Move "${name}" to Deleted Files Archive? You can inspect or restore it anytime from the Deleted Files button.`)) return;
+
+    try {
+      // 1. Soft-delete user in Firestore
+      await updateUser(user.id, {
+        deleted: true,
+        status: 'DELETED',
+        membershipStatus: 'DELETED',
+        deletedAt: new Date().toISOString()
+      });
+
+      // 2. Free any active bookings / seats / lockers
+      const activeBk = (bookings || []).find(b =>
+        (b.userId === user.id || (b.userPhone && user.phone && b.userPhone.replace(/\D/g, '') === user.phone.replace(/\D/g, ''))) &&
+        !['CANCELLED', 'COMPLETED'].includes(b.status)
+      );
+      if (activeBk) {
+        await changeBookingStatus(activeBk.id, activeBk.seatId, 'COMPLETED');
+        if (activeBk.seatId) {
+          await changeSeatStatus(activeBk.seatId, 'AVAILABLE');
+        }
+        if (activeBk.lockerNumber) {
+          const matchingLocker = (lockers || []).find(l => l.lockerNumber === activeBk.lockerNumber);
+          if (matchingLocker) await releaseLocker(matchingLocker.id);
+        }
+      }
+      alert(`✅ User "${name}" has been moved to Deleted Files.`);
+    } catch (err) {
+      console.error('Error deleting user:', err);
+      alert('Failed to delete user: ' + err.message);
+    }
+  };
+
+  const handleRestoreUser = async (user) => {
+    try {
+      await updateUser(user.id, {
+        deleted: false,
+        status: 'ACTIVE',
+        membershipStatus: 'INACTIVE',
+        deletedAt: null
+      });
+      alert(`✅ User "${user.fullName || user.name}" has been restored to the active database.`);
+    } catch (err) {
+      console.error('Error restoring user:', err);
+      alert('Failed to restore user: ' + err.message);
+    }
+  };
+
+  const handlePermanentDeleteUser = async (user) => {
+    if (!window.confirm(`⚠️ PERMANENT DELETE: Are you sure you want to permanently erase "${user.fullName || user.name}" from Firestore? This CANNOT be undone.`)) return;
+    try {
+      await deleteUserFromFirestore(user.id);
+      alert(`✅ User permanently erased.`);
+    } catch (err) {
+      console.error('Error permanently erasing user:', err);
+      alert('Failed to erase user: ' + err.message);
     }
   };
 
@@ -753,7 +850,8 @@ export const AdminPage = () => {
         originalPrice: packageForm.originalPrice ? Number(packageForm.originalPrice) : null,
         duration: packageForm.duration || 'month',
         lockerEligible: packageForm.lockerEligible !== false,
-        features: formattedFeatures
+        features: formattedFeatures,
+        popular: packageForm.popular === true
       };
 
       if (editingPackage) {
@@ -765,7 +863,7 @@ export const AdminPage = () => {
       }
       setShowPackageModal(false);
       setEditingPackage(null);
-      setPackageForm({ id: '', name: '', price: '', originalPrice: '', duration: '', lockerEligible: true, features: '' });
+      setPackageForm({ id: '', name: '', price: '', originalPrice: '', duration: '', lockerEligible: true, features: '', popular: false });
     } catch (err) {
       console.error('Error saving package:', err);
       alert('Failed to save package: ' + err.message);
@@ -782,6 +880,82 @@ export const AdminPage = () => {
       } catch (err) {
         console.error('Error deleting package:', err);
         alert('Failed to delete package: ' + err.message);
+      }
+    }
+  };
+
+  // Amenities CMS CRUD handlers
+  const handleAmenitySubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const data = {
+        title: amenityForm.title,
+        desc: amenityForm.desc,
+        iconName: amenityForm.iconName
+      };
+
+      if (editingAmenity) {
+        await updateAmenity(editingAmenity.id, data);
+        alert('Amenity updated successfully!');
+      } else {
+        await createAmenity(data);
+        alert('New amenity added successfully!');
+      }
+      setShowAmenityModal(false);
+      setEditingAmenity(null);
+      setAmenityForm({ id: '', iconName: 'Armchair', title: '', desc: '' });
+    } catch (err) {
+      console.error('Error saving amenity:', err);
+      alert('Failed to save amenity: ' + err.message);
+    }
+  };
+
+  const handleDeleteAmenitySubmit = async (id) => {
+    if (window.confirm('Are you sure you want to delete this amenity card?')) {
+      try {
+        await deleteAmenity(id);
+        alert('Amenity card deleted.');
+      } catch (err) {
+        console.error('Error deleting amenity:', err);
+        alert('Failed to delete amenity: ' + err.message);
+      }
+    }
+  };
+
+  // FAQs CMS CRUD handlers
+  const handleFaqSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const data = {
+        question: faqForm.question,
+        answer: faqForm.answer,
+        order: Number(faqForm.order || 1)
+      };
+
+      if (editingFaq) {
+        await updateFaq(editingFaq.id, data);
+        alert('FAQ updated successfully!');
+      } else {
+        await createFaq(data);
+        alert('New FAQ added successfully!');
+      }
+      setShowFaqModal(false);
+      setEditingFaq(null);
+      setFaqForm({ id: '', question: '', answer: '', order: 1 });
+    } catch (err) {
+      console.error('Error saving FAQ:', err);
+      alert('Failed to save FAQ: ' + err.message);
+    }
+  };
+
+  const handleDeleteFaqSubmit = async (id) => {
+    if (window.confirm('Are you sure you want to delete this FAQ?')) {
+      try {
+        await deleteFaq(id);
+        alert('FAQ deleted.');
+      } catch (err) {
+        console.error('Error deleting FAQ:', err);
+        alert('Failed to delete FAQ: ' + err.message);
       }
     }
   };
@@ -909,18 +1083,21 @@ export const AdminPage = () => {
     return matchesQuery && matchesPayment;
   });
 
-  // --- Unified User Registry (Includes Admin registered users + Website booked students) ---
+  // --- Unified User Registry (Includes Admin registered users + Website booked students, excluding deleted files) ---
   const allUnifiedUsers = useMemo(() => {
     const userMap = new Map();
-    // 1. Add all users from the users collection
+    // 1. Add all users from the users collection that are NOT deleted
     (users || []).forEach(u => {
-      if (!u || !u.id) return;
+      if (!u || !u.id || u.deleted === true || u.status === 'DELETED' || u.membershipStatus === 'DELETED') return;
       userMap.set(u.id, { ...u, source: 'REGISTERED' });
     });
 
-    // 2. Also ensure any student who has a booking in the bookings collection is unified
+    // 2. Also ensure any student who has a legitimate booking is unified
     (bookings || []).forEach(b => {
       if (!b) return;
+      // Never synthesize placeholder "Scholar" or blank name records into users table!
+      if (!b.userName || b.userName === 'Scholar' || (!b.userPhone && !b.userEmail)) return;
+
       const bUserId = b.userId;
       const phoneClean = (b.userPhone || '').replace(/\D/g, '');
       const emailClean = (b.userEmail || '').toLowerCase().trim();
@@ -948,8 +1125,8 @@ export const AdminPage = () => {
         userMap.set(autoId, {
           id: autoId,
           userCode: b.userCode || `QD-STU-${Math.floor(1000 + Math.random() * 9000)}`,
-          fullName: b.userName || 'Scholar',
-          name: b.userName || 'Scholar',
+          fullName: b.userName,
+          name: b.userName,
           email: b.userEmail || '',
           phone: b.userPhone || '',
           passType: b.passType || 'DAILY',
@@ -965,6 +1142,11 @@ export const AdminPage = () => {
 
     return Array.from(userMap.values());
   }, [users, bookings]);
+
+  // --- Deleted Users Archive (Recycle Bin) ---
+  const deletedUsersList = useMemo(() => {
+    return (users || []).filter(u => u && (u.deleted === true || u.status === 'DELETED' || u.membershipStatus === 'DELETED'));
+  }, [users]);
 
   // --- Dashboard Computed: Unpaid / Partial Payments ---
   const unpaidBookings = bookings.filter(b => b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID');
@@ -1252,6 +1434,7 @@ export const AdminPage = () => {
               },
               { id: 'PACKAGES', label: 'Access Packages', icon: <Package size={18} />, badge: plans.length },
               { id: 'FINANCE', label: 'Finance & Revenue', icon: <CreditCard size={18} />, badge: 'NPR', isSuccess: true },
+              { id: 'CMS', label: 'Landing Page CMS', icon: <Sliders size={18} />, activeColor: '#10B981' },
               { id: 'SYSTEM', label: 'System & Database', icon: <Settings size={18} /> },
             ].map(item => {
               const isActive = activeTab === item.id;
@@ -1380,6 +1563,7 @@ export const AdminPage = () => {
               {activeTab === 'BOOKINGS' && 'User Reservation Queue'}
               {activeTab === 'PACKAGES' && 'Access Packages & Pricing Management'}
               {activeTab === 'FINANCE' && 'Real-Time Financial & Revenue Management'}
+              {activeTab === 'CMS' && 'Landing Page CMS & Content Controls'}
               {activeTab === 'SYSTEM' && 'System Parameters & Maintenance'}
             </h2>
             <div style={{ fontSize: '0.85rem', color: '#64748B', marginTop: '0.2rem' }}>
@@ -3386,7 +3570,7 @@ export const AdminPage = () => {
               <button
                 onClick={() => {
                   setEditingPackage(null);
-                  setPackageForm({ id: '', name: '', price: '', originalPrice: '', duration: '', lockerEligible: true, features: '' });
+                  setPackageForm({ id: '', name: '', price: '', originalPrice: '', duration: '', lockerEligible: true, features: '', popular: false });
                   setShowPackageModal(true);
                 }}
                 style={{
@@ -3477,7 +3661,8 @@ export const AdminPage = () => {
                           originalPrice: plan.originalPrice || '',
                           duration: plan.duration || '',
                           lockerEligible: plan.lockerEligible !== false,
-                          features: Array.isArray(plan.features) ? plan.features.join(', ') : (plan.features || '')
+                          features: Array.isArray(plan.features) ? plan.features.join(', ') : (plan.features || ''),
+                          popular: plan.popular === true
                         });
                         setShowPackageModal(true);
                       }}
@@ -3790,6 +3975,280 @@ export const AdminPage = () => {
               )}
             </div>
 
+          </div>
+        )}
+
+        {/* ==================== TAB 6: LANDING PAGE CMS ==================== */}
+        {activeTab === 'CMS' && (
+          <div>
+            {/* Sub-tabs header */}
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid #E2E8F0', paddingBottom: '0.5rem' }}>
+              <button
+                onClick={() => setCmsSubTab('AMENITIES')}
+                style={{
+                  padding: '0.5rem 1rem',
+                  backgroundColor: cmsSubTab === 'AMENITIES' ? '#1E293B' : 'transparent',
+                  color: cmsSubTab === 'AMENITIES' ? '#FFFFFF' : '#475569',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontSize: '0.85rem'
+                }}
+              >
+                Amenities Cards
+              </button>
+              <button
+                onClick={() => setCmsSubTab('FAQS')}
+                style={{
+                  padding: '0.5rem 1rem',
+                  backgroundColor: cmsSubTab === 'FAQS' ? '#1E293B' : 'transparent',
+                  color: cmsSubTab === 'FAQS' ? '#FFFFFF' : '#475569',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontSize: '0.85rem'
+                }}
+              >
+                FAQ Accordions
+              </button>
+            </div>
+
+            {/* Sub-tab 1: Amenities */}
+            {cmsSubTab === 'AMENITIES' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0F172A' }}>Amenities (Landing Cards)</h3>
+                    <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: '#64748B' }}>
+                      Add, update, or remove the thoughtful amenity cards shown in the Serene Experience section.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEditingAmenity(null);
+                      setAmenityForm({ id: '', iconName: 'Armchair', title: '', desc: '' });
+                      setShowAmenityModal(true);
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      backgroundColor: '#10B981',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      padding: '0.55rem 1rem',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Plus size={16} /> Add Amenity Card
+                  </button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
+                  {amenities && amenities.length > 0 ? (
+                    amenities.map(item => (
+                      <div
+                        key={item.id}
+                        style={{
+                          backgroundColor: '#FFFFFF',
+                          borderRadius: '12px',
+                          border: '1px solid #E2E8F0',
+                          padding: '1.5rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                            <div style={{
+                              width: '40px',
+                              height: '40px',
+                              borderRadius: '8px',
+                              backgroundColor: '#F1F5F9',
+                              color: '#F59E0B',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 'bold',
+                              fontSize: '0.85rem'
+                            }}>
+                              {item.iconName || 'Wind'}
+                            </div>
+                            <span style={{ fontSize: '0.7rem', color: '#94A3B8', fontFamily: 'monospace' }}>{item.id}</span>
+                          </div>
+                          <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: 700, color: '#0F172A' }}>{item.title}</h4>
+                          <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748B', lineHeight: 1.5 }}>{item.desc}</p>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.25rem', borderTop: '1px solid #F1F5F9', paddingTop: '0.75rem' }}>
+                          <button
+                            onClick={() => {
+                              setEditingAmenity(item);
+                              setAmenityForm({ id: item.id, iconName: item.iconName || 'Armchair', title: item.title, desc: item.desc });
+                              setShowAmenityModal(true);
+                            }}
+                            style={{
+                              flex: 1,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '0.3rem',
+                              backgroundColor: '#EFF6FF',
+                              color: '#2563EB',
+                              border: 'none',
+                              padding: '0.45rem',
+                              borderRadius: '6px',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Edit size={14} /> Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteAmenitySubmit(item.id)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              backgroundColor: '#FEF2F2',
+                              color: '#DC2626',
+                              border: 'none',
+                              padding: '0.45rem 0.75rem',
+                              borderRadius: '6px',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', color: '#64748B' }}>
+                      No amenities cards found. Click "Add Amenity Card" to start.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Sub-tab 2: FAQs */}
+            {cmsSubTab === 'FAQS' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0F172A' }}>Frequently Asked Questions</h3>
+                    <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: '#64748B' }}>
+                      Manage Accordion questions and answers displayed on both the Landing page and Standalone FAQ views.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEditingFaq(null);
+                      setFaqForm({ id: '', question: '', answer: '', order: faqs.length + 1 });
+                      setShowFaqModal(true);
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      backgroundColor: '#10B981',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      padding: '0.55rem 1rem',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Plus size={16} /> Add FAQ Accordion
+                  </button>
+                </div>
+
+                <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: 700 }}>
+                        <th style={{ padding: '0.85rem 1.25rem', width: '80px' }}>Order</th>
+                        <th style={{ padding: '0.85rem 1.25rem', width: '300px' }}>Question</th>
+                        <th style={{ padding: '0.85rem 1.25rem' }}>Answer Preview</th>
+                        <th style={{ padding: '0.85rem 1.25rem', width: '140px', textAlign: 'right' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {faqs && faqs.length > 0 ? (
+                        faqs.map(faq => (
+                          <tr key={faq.id} style={{ borderBottom: '1px solid #F1F5F9', color: '#334155' }}>
+                            <td style={{ padding: '1rem 1.25rem', fontWeight: 700 }}>
+                              {faq.order || 99}
+                            </td>
+                            <td style={{ padding: '1rem 1.25rem', fontWeight: 600, color: '#0F172A' }}>
+                              {faq.question}
+                            </td>
+                            <td style={{ padding: '1rem 1.25rem', color: '#64748B' }}>
+                              {faq.answer && faq.answer.length > 100 ? `${faq.answer.slice(0, 100)}...` : faq.answer}
+                            </td>
+                            <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
+                              <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
+                                <button
+                                  onClick={() => {
+                                    setEditingFaq(faq);
+                                    setFaqForm({ id: faq.id, question: faq.question, answer: faq.answer, order: faq.order || 1 });
+                                    setShowFaqModal(true);
+                                  }}
+                                  style={{
+                                    backgroundColor: '#EFF6FF',
+                                    color: '#2563EB',
+                                    border: 'none',
+                                    padding: '0.35rem 0.6rem',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontWeight: 600
+                                  }}
+                                >
+                                  <Edit size={14} />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteFaqSubmit(faq.id)}
+                                  style={{
+                                    backgroundColor: '#FEF2F2',
+                                    color: '#DC2626',
+                                    border: 'none',
+                                    padding: '0.35rem 0.6rem',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontWeight: 600
+                                  }}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={4} style={{ padding: '3rem', textAlign: 'center', color: '#64748B' }}>
+                            No FAQs found. Click "Add FAQ Accordion" to create one.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -4659,7 +5118,7 @@ export const AdminPage = () => {
                 />
               </div>
 
-              <div style={{ backgroundColor: '#F8FAFC', padding: '0.85rem', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+              <div style={{ backgroundColor: '#F8FAFC', padding: '0.85rem', borderRadius: '8px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700, color: '#0F172A' }}>
                   <input
                     type="checkbox"
@@ -4667,6 +5126,14 @@ export const AdminPage = () => {
                     onChange={e => setPackageForm({ ...packageForm, lockerEligible: e.target.checked })}
                   />
                   <span>Allow Locker Add-on for this package</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700, color: '#0F172A' }}>
+                  <input
+                    type="checkbox"
+                    checked={packageForm.popular}
+                    onChange={e => setPackageForm({ ...packageForm, popular: e.target.checked })}
+                  />
+                  <span>⭐ Mark as Most Popular Package</span>
                 </label>
               </div>
 
@@ -5401,6 +5868,164 @@ export const AdminPage = () => {
         }}
         booking={selectedBookingForConfirmation}
       />
+
+      {/* ==================== CMS MODAL: ADD/EDIT AMENITY ==================== */}
+      {showAmenityModal && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF', borderRadius: '16px', width: '100%', maxWidth: '480px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', overflow: 'hidden'
+          }}>
+            <div style={{ padding: '1.25rem 1.5rem', backgroundColor: '#1E293B', color: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>
+                {editingAmenity ? 'Edit Amenity Card' : 'Add New Amenity Card'}
+              </h3>
+              <button onClick={() => setShowAmenityModal(false)} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '0.2rem' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAmenitySubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Card Title *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Ergonomic Chairs"
+                  value={amenityForm.title}
+                  onChange={e => setAmenityForm({ ...amenityForm, title: e.target.value })}
+                  style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Description *</label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="Explain the amenity's contribution to focus & study..."
+                  value={amenityForm.desc}
+                  onChange={e => setAmenityForm({ ...amenityForm, desc: e.target.value })}
+                  style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box', fontFamily: 'inherit', resize: 'vertical' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Visual Icon Symbol</label>
+                <select
+                  value={amenityForm.iconName}
+                  onChange={e => setAmenityForm({ ...amenityForm, iconName: e.target.value })}
+                  style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', backgroundColor: '#FFF', boxSizing: 'border-box' }}
+                >
+                  <option value="Wind">Wind (AC / Air Control)</option>
+                  <option value="VolumeX">VolumeX (Silence / Quiet)</option>
+                  <option value="Armchair">Armchair (Ergonomic Chair)</option>
+                  <option value="Zap">Zap (Power plug outlets)</option>
+                  <option value="Key">Key (Physical key locker)</option>
+                  <option value="Lock">Lock (Digital Locker / Safety)</option>
+                  <option value="Wifi">Wifi (Internet / Speed)</option>
+                  <option value="ShieldAlert">ShieldAlert (Backup power inverter)</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem', borderTop: '1px solid #F1F5F9', paddingTop: '1rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAmenityModal(false)}
+                  style={{ padding: '0.55rem 1rem', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 700, color: '#475569', backgroundColor: '#FFFFFF', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '0.55rem 1.25rem', border: 'none', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 700, color: '#FFFFFF', backgroundColor: '#10B981', cursor: 'pointer' }}
+                >
+                  {editingAmenity ? 'Save Changes' : 'Create Amenity Card'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== CMS MODAL: ADD/EDIT FAQ ==================== */}
+      {showFaqModal && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF', borderRadius: '16px', width: '100%', maxWidth: '520px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', overflow: 'hidden'
+          }}>
+            <div style={{ padding: '1.25rem 1.5rem', backgroundColor: '#1E293B', color: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>
+                {editingFaq ? 'Edit FAQ Accordion' : 'Add New FAQ Accordion'}
+              </h3>
+              <button onClick={() => setShowFaqModal(false)} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '0.2rem' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleFaqSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Question / Inquiry *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Is outside food allowed in the lounge?"
+                  value={faqForm.question}
+                  onChange={e => setFaqForm({ ...faqForm, question: e.target.value })}
+                  style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Detailed Answer / Response *</label>
+                <textarea
+                  required
+                  rows={4}
+                  placeholder="Provide clear, concise info answering the query..."
+                  value={faqForm.answer}
+                  onChange={e => setFaqForm({ ...faqForm, answer: e.target.value })}
+                  style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box', fontFamily: 'inherit', resize: 'vertical' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Sort Ordering Rank</label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={faqForm.order}
+                  onChange={e => setFaqForm({ ...faqForm, order: Number(e.target.value) })}
+                  style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem', borderTop: '1px solid #F1F5F9', paddingTop: '1rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowFaqModal(false)}
+                  style={{ padding: '0.55rem 1rem', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 700, color: '#475569', backgroundColor: '#FFFFFF', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '0.55rem 1.25rem', border: 'none', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 700, color: '#FFFFFF', backgroundColor: '#10B981', cursor: 'pointer' }}
+                >
+                  {editingFaq ? 'Save Accordion' : 'Create Accordion'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

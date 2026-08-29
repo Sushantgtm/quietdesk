@@ -5,6 +5,7 @@ import { AboutSection } from '../features/landing/AboutSection';
 import { AmenitiesSection } from '../features/landing/AmenitiesSection';
 import { SeatMap } from '../features/seats/SeatMap';
 import { PricingSection } from '../features/landing/PricingSection';
+import { FaqSection } from '../features/landing/FaqSection';
 import { Footer } from '../components/layout/Footer';
 
 export const LandingPage = () => {
@@ -17,6 +18,7 @@ export const LandingPage = () => {
         <AmenitiesSection />
         <SeatMap />
         <PricingSection />
+        <FaqSection />
       </main>
       <Footer />
     </div>

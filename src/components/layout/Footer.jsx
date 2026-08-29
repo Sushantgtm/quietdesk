@@ -49,12 +49,12 @@ export const Footer = () => {
                   textTransform: 'uppercase',
                   fontWeight: 600
                 }}>
-                  Kathmandu · Silence, by design.
+                  Kathmandu · Less noise, more progress.
                 </div>
               </div>
             </div>
             <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.9rem', lineHeight: 1.6 }}>
-              Silence, by design. A premium study and workspace environment located in the heart of Kathmandu.
+              Less noise, more progress. A premium study and workspace environment located in the heart of Kathmandu.
             </p>
           </div>
 
@@ -74,7 +74,7 @@ export const Footer = () => {
               </li>
               <li style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <Phone size={16} color="var(--accent)" />
-                <span>+977 984-1234567</span>
+                <span>+977 9864826810</span>
               </li>
             </ul>
           </div>
@@ -86,9 +86,9 @@ export const Footer = () => {
             </h4>
             <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem' }}>
               <li><a href="#about" style={{ color: 'inherit' }}>About Us</a></li>
-              <li><a href="#privacy" style={{ color: 'inherit' }}>Privacy Policy</a></li>
-              <li><a href="#terms" style={{ color: 'inherit' }}>Terms of Service</a></li>
-              <li><a href="#faq" style={{ color: 'inherit' }}>FAQ</a></li>
+              <li><Link to="/privacy" style={{ color: 'inherit' }}>Privacy Policy</Link></li>
+              <li><Link to="/terms" style={{ color: 'inherit' }}>Terms of Service</Link></li>
+              <li><Link to="/faq" style={{ color: 'inherit' }}>FAQ</Link></li>
             </ul>
           </div>
 

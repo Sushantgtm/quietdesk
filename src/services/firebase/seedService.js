@@ -3,6 +3,7 @@ import { db } from './firebase';
 import { MOCK_USERS } from './userService';
 import { MOCK_SEATS, MOCK_LOCKERS, MOCK_BOOKINGS, ACCESS_PLANS } from '../mock/mockData';
 import { INITIAL_ZONES, resetAndSeedZonesInFirestore } from './zoneService';
+import { INITIAL_FAQS } from './faqService';
 
 export const MOCK_SEATS_DATA = MOCK_SEATS;
 export const MOCK_LOCKERS_DATA = MOCK_LOCKERS;
@@ -23,7 +24,6 @@ export const MOCK_ADMINS_DATA = [
 
 export const MOCK_AMENITIES_DATA = [
   { id: 'amenity_ac', iconName: 'Wind', title: 'AC Available', desc: 'Fully air-conditioned and climate-controlled rooms for year-round focus.' },
-  { id: 'amenity_quiet', iconName: 'VolumeX', title: 'Quiet Environment', desc: 'Strict acoustic silence discipline enforced across all study zones.' },
   { id: 'amenity_chair', iconName: 'Armchair', title: 'Comfortable Chairs', desc: 'High-comfort ergonomic chairs designed for long hours of fatigue-free study.' },
   { id: 'amenity_power', iconName: 'Zap', title: 'Charging Plug in Each Seat', desc: 'Dedicated dual power outlets at every desk for your laptops and devices.' },
   { id: 'amenity_lockers', iconName: 'Key', title: 'Private Key Lockers', desc: '20 Secure physical key lockers to safely store your books and belongings.' },
@@ -37,7 +37,7 @@ export const MOCK_BRANCHES_DATA = [
     name: 'The Quiet Desk - Lazimpat Main Branch',
     city: 'Kathmandu',
     address: 'Lazimpat Road (Near Standard Chartered Bank), Kathmandu 44600',
-    phone: '+977 9841234567',
+    phone: '+977 9864826810',
     email: 'lazimpat@quietdesk.np',
     hours: '7:00 AM - 10:00 PM (Seven days a week)',
     totalCapacity: 62,
@@ -47,7 +47,7 @@ export const MOCK_BRANCHES_DATA = [
 ];
 
 export const seedAllCollectionsToFirestore = async () => {
-  const summary = { seats: 0, lockers: 0, zones: 0, bookings: 0, plans: 0, admins: 0, amenities: 0, branches: 0, users: 0 };
+  const summary = { seats: 0, lockers: 0, zones: 0, bookings: 0, plans: 0, admins: 0, amenities: 0, branches: 0, users: 0, faqs: 0 };
 
   try {
     // 1. Delete legacy zones from Firestore and re-seed the 5 official floor plan zones
@@ -100,6 +100,12 @@ export const seedAllCollectionsToFirestore = async () => {
     for (const user of MOCK_USERS) {
       await setDoc(doc(db, 'users', user.id), user, { merge: true });
       summary.users++;
+    }
+
+    // 10. Seed FAQs
+    for (const faq of INITIAL_FAQS) {
+      await setDoc(doc(db, 'faqs', faq.id), faq, { merge: true });
+      summary.faqs++;
     }
 
     console.log('✅ Successfully deleted existing legacy zones and seeded all collections to Firestore:', summary);

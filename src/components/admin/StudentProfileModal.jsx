@@ -3,7 +3,7 @@ import {
   X, User, Phone, Mail, MapPin, Shield, Clock, Bookmark,
   Lock, CreditCard, CheckCircle2, AlertCircle, Edit3,
   Calendar, DollarSign, ChevronRight, Repeat, FileText,
-  ArrowDownCircle, Banknote, TrendingUp, Package, Key
+  ArrowDownCircle, Banknote, TrendingUp, Package, Key, Trash2
 } from 'lucide-react';
 
 const TABS = ['profile', 'status', 'financials', 'history'];
@@ -22,6 +22,7 @@ export const StudentProfileModal = ({
   onNewReservation,
   onCollectDue,
   onEditUser,
+  onDeleteUser,
 }) => {
   const [activeTab, setActiveTab] = useState('profile');
 
@@ -340,8 +341,26 @@ export const StudentProfileModal = ({
 
         {/* ── Footer Actions ── */}
         <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <div style={{ fontSize: '0.78rem', color: '#94A3B8' }}>
-            {userBookings.length} booking(s) · Member since {user.joinedDate || user.createdAt ? new Date(user.joinedDate || user.createdAt).toLocaleDateString('en-NP', { month: 'short', year: 'numeric' }) : 'N/A'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ fontSize: '0.78rem', color: '#94A3B8' }}>
+              {userBookings.length} booking(s) · Member since {user.joinedDate || user.createdAt ? new Date(user.joinedDate || user.createdAt).toLocaleDateString('en-NP', { month: 'short', year: 'numeric' }) : 'N/A'}
+            </div>
+            {onDeleteUser && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onDeleteUser(user);
+                }}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                  backgroundColor: '#FEF2F2', color: '#DC2626', border: '1px solid #FCA5A5',
+                  borderRadius: '6px', padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer'
+                }}
+                title="Delete user account"
+              >
+                <Trash2 size={12} /> Delete Account
+              </button>
+            )}
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             {totalDue > 0 && onCollectDue && (

@@ -52,7 +52,7 @@ export const PricingSection = () => {
           : 'Dedicated workstation access with priority perks and premium storage.'
     );
 
-    const isHighlighted = plan.highlighted || plan.id?.includes('weekly') || plan.isPopular;
+    const isHighlighted = plan.highlighted || plan.popular || plan.id?.includes('weekly') || plan.isPopular;
 
     return {
       ...plan,
