@@ -1,3 +1,5 @@
+import { SEAT_NUMBER_BY_PHYSICAL_ID } from './seatLayout';
+
 // 62 Architectural Cabins matching the Floor Layout Map - All Available for Clean Start
 export const MOCK_SEATS = [
   // ── 1. Left Quiet Row (A1–A13) — NPR 500/day (13 Desks) ──
@@ -41,8 +43,7 @@ export const MOCK_SEATS = [
   { id: 'seat_C23', seatNumber: 'C23', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
   { id: 'seat_C24', seatNumber: 'C24', zone: 'Center Focus Row (Zone C)', type: 'PRIVATE_CABIN', status: 'AVAILABLE', pricePerDay: 600, amenities: ['Acoustic Partition', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'] },
 
-  // ── 3. Center T-Wing Section (T1–T4) — NPR 550/day (4 Cabins) ──
-  { id: 'seat_T1', seatNumber: 'T1', zone: 'Center T-Wing Section (Zone T)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 550, amenities: ['Power Outlet', 'Wide Desk', 'Ergonomic Chair'] },
+  // ── 3. Center T-Wing Section (T2–T4) — NPR 550/day (3 Cabins) ──
   { id: 'seat_T2', seatNumber: 'T2', zone: 'Center T-Wing Section (Zone T)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 550, amenities: ['Power Outlet', 'Wide Desk', 'Ergonomic Chair'] },
   { id: 'seat_T3', seatNumber: 'T3', zone: 'Center T-Wing Section (Zone T)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 550, amenities: ['Power Outlet', 'Wide Desk', 'Ergonomic Chair'] },
   { id: 'seat_T4', seatNumber: 'T4', zone: 'Center T-Wing Section (Zone T)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 550, amenities: ['Power Outlet', 'Wide Desk', 'Ergonomic Chair'] },
@@ -55,7 +56,7 @@ export const MOCK_SEATS = [
   { id: 'seat_B5', seatNumber: 'B5', zone: 'South Baseline Row (Zone B)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 450, amenities: ['Power Outlet', 'Reading Lamp'] },
   { id: 'seat_B6', seatNumber: 'B6', zone: 'South Baseline Row (Zone B)', type: 'STANDARD', status: 'AVAILABLE', pricePerDay: 450, amenities: ['Power Outlet', 'Reading Lamp'] },
 
-  // ── 5. Right Window Wall (R1–R15) — NPR 700/day (15 Desks) ──
+  // ── 5. Right Window Wall (R1–R16) — NPR 700/day (16 Desks) ──
   { id: 'seat_R1', seatNumber: 'R1', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
   { id: 'seat_R2', seatNumber: 'R2', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
   { id: 'seat_R3', seatNumber: 'R3', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
@@ -71,7 +72,11 @@ export const MOCK_SEATS = [
   { id: 'seat_R13', seatNumber: 'R13', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
   { id: 'seat_R14', seatNumber: 'R14', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] },
   { id: 'seat_R15', seatNumber: 'R15', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] }
-];
+  ,{ id: 'seat_R16', seatNumber: 'R16', zone: 'Right Window Wall (Zone R)', type: 'PREMIUM_WINDOW', status: 'AVAILABLE', pricePerDay: 700, amenities: ['Window View', 'Natural Light', 'Power Outlet', 'Ergonomic Chair'] }
+].map((seat) => ({
+  ...seat,
+  seatNumber: SEAT_NUMBER_BY_PHYSICAL_ID[seat.seatNumber]
+}));
 
 // 20 Key Storage Lockers (Locker A to Locker T) - All Available for Clean Start
 const LOCKER_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T'];

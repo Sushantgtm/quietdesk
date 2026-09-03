@@ -143,25 +143,24 @@ export const AdminPage = () => {
   const [showSeatModal, setShowSeatModal] = useState(false);
   const [editingSeat, setEditingSeat] = useState(null);
   const [seatForm, setSeatForm] = useState({
-    id: '', seatNumber: '', zone: 'Left Quiet Row (Zone A)', type: 'Single Desk', pricePerDay: 500, status: 'AVAILABLE', features: 'Power Outlet, Ergonomic Chair'
+    id: '', seatNumber: '', zone: 'Left Quiet Row (Zone A)', type: 'Single Desk', status: 'AVAILABLE', features: 'Power Outlet, Ergonomic Chair'
   });
 
   // Study Zone Management State
   const [showZoneModal, setShowZoneModal] = useState(false);
   const [editingZone, setEditingZone] = useState(null);
   const [zoneForm, setZoneForm] = useState({
-    id: '', name: '', capacity: 10, pricePerDay: 500, description: ''
+    id: '', name: '', capacity: 10, description: ''
   });
 
   const handleOpenZoneModal = (zone = null) => {
     if (zone) {
       setEditingZone(zone);
       setZoneForm({
-        id: zone.id,
-        name: zone.name || '',
-        capacity: zone.capacity || 10,
-        pricePerDay: zone.pricePerDay || 500,
-        description: zone.description || ''
+            id: zone.id,
+            name: zone.name || '',
+            capacity: zone.capacity || 10,
+            description: zone.description || ''
       });
     } else {
       setEditingZone(null);
@@ -169,7 +168,6 @@ export const AdminPage = () => {
         id: '',
         name: '',
         capacity: 10,
-        pricePerDay: 500,
         description: ''
       });
     }
@@ -180,16 +178,14 @@ export const AdminPage = () => {
     e.preventDefault();
     if (editingZone) {
       await updateZoneDetails(editingZone.id, {
-        name: zoneForm.name,
-        capacity: Number(zoneForm.capacity),
-        pricePerDay: Number(zoneForm.pricePerDay),
-        description: zoneForm.description
+            name: zoneForm.name,
+            capacity: Number(zoneForm.capacity),
+            description: zoneForm.description
       });
     } else {
       await createZone({
         name: zoneForm.name,
         capacity: Number(zoneForm.capacity),
-        pricePerDay: Number(zoneForm.pricePerDay),
         description: zoneForm.description
       });
     }
@@ -200,17 +196,7 @@ export const AdminPage = () => {
     if (!zoneId) return;
     if (window.confirm(`Are you sure you want to delete the study zone "${zoneName}"?`)) {
       setShowZoneModal(false);
-      await deleteZone(zoneId);
-    }
-  };
-
-  const handleSyncZonePriceToSeats = async (zoneName, newPrice) => {
-    if (window.confirm(`Update the daily rate of ALL desks in "${zoneName}" to NPR ${newPrice}?`)) {
-      const seatsInZone = seats.filter(s => s.zone === zoneName);
-      for (const seat of seatsInZone) {
-        await updateSeatDetails(seat.id, { pricePerDay: Number(newPrice) });
-      }
-      alert(`Successfully updated daily rate for ${seatsInZone.length} desks in "${zoneName}".`);
+          await deleteZone(zoneId);
     }
   };
 
@@ -227,7 +213,6 @@ export const AdminPage = () => {
     zone: 'Left Quiet Row (Zone A)',
     type: 'Single Desk',
     floor: 'Floor 1 (Ground)',
-    pricePerDay: 500,
     status: 'AVAILABLE',
     features: ['Power Outlet', 'Ergonomic Chair', 'Reading Light'],
     hasLocker: false,
@@ -240,7 +225,6 @@ export const AdminPage = () => {
     zone: 'Center Focus Row (Zone C)',
     type: 'Private Focus Pod',
     floor: 'Floor 1 (Center)',
-    pricePerDay: 600,
     status: 'AVAILABLE',
     features: ['Power Outlet', 'Ergonomic Chair', 'Acoustic Soundproof Spine', 'Reading Light']
   });
@@ -305,7 +289,7 @@ export const AdminPage = () => {
     let basePrice = 350;
     if (passType === 'DAILY') {
       const selectedSeat = seats.find(s => s.id === seatId);
-      basePrice = selectedSeat ? (selectedSeat.pricePerDay || 350) : 350;
+      basePrice = 500;
     } else if (passType === 'WEEKLY') {
       basePrice = 2100;
     } else if (passType === 'MONTHLY') {
@@ -711,7 +695,6 @@ export const AdminPage = () => {
         seatNumber: seatToEdit.seatNumber || '',
         zone: seatToEdit.zone || 'Left Quiet Row (Zone A)',
         type: seatToEdit.type || 'Single Desk',
-        pricePerDay: seatToEdit.pricePerDay || 500,
         status: seatToEdit.status || 'AVAILABLE',
         features: Array.isArray(seatToEdit.features) ? seatToEdit.features.join(', ') : (seatToEdit.features || 'Power Outlet, Ergonomic Chair')
       });
@@ -722,7 +705,6 @@ export const AdminPage = () => {
         seatNumber: `A14`,
         zone: 'Left Quiet Row (Zone A)',
         type: 'Single Desk',
-        pricePerDay: 500,
         status: 'AVAILABLE',
         features: 'Power Outlet, Ergonomic Chair, Reading Light'
       });
@@ -741,7 +723,6 @@ export const AdminPage = () => {
         seatNumber: seatForm.seatNumber,
         zone: seatForm.zone,
         type: seatForm.type,
-        pricePerDay: Number(seatForm.pricePerDay),
         status: seatForm.status,
         features: featuresArr
       };
@@ -784,7 +765,6 @@ export const AdminPage = () => {
         zone: singleStationForm.zone,
         type: singleStationForm.type,
         floor: singleStationForm.floor,
-        pricePerDay: Number(singleStationForm.pricePerDay),
         status: singleStationForm.status,
         features: singleStationForm.features,
         hasLocker: singleStationForm.hasLocker,
@@ -827,7 +807,6 @@ export const AdminPage = () => {
           zone: bulkStationForm.zone,
           type: bulkStationForm.type,
           floor: bulkStationForm.floor,
-          pricePerDay: Number(bulkStationForm.pricePerDay),
           status: bulkStationForm.status,
           features: bulkStationForm.features
         });
@@ -2631,12 +2610,6 @@ export const AdminPage = () => {
                               </h3>
                               <div style={{ fontSize: '0.8rem', color: '#64748B' }}>{seat.type || 'Single Desk'}</div>
                             </div>
-                            <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0F172A' }}>
-                                NPR {seat.pricePerDay}
-                              </div>
-                              <div style={{ fontSize: '0.7rem', color: '#64748B' }}>per day</div>
-                            </div>
                           </div>
 
                           {/* Occupant Info Chip */}
@@ -2700,9 +2673,9 @@ export const AdminPage = () => {
                                       seatId: seat.id,
                                       seatNumber: seat.seatNumber,
                                       userName: `Walk-in Guest (${seat.seatNumber})`,
-                                      totalAmount: seat.pricePerDay || 350,
+                                      totalAmount: 500,
                                       amountPaid: 0,
-                                      pendingAmount: seat.pricePerDay || 350,
+                                      pendingAmount: 500,
                                       paymentStatus: 'PENDING',
                                       passType: 'DAILY'
                                     };
@@ -2768,7 +2741,6 @@ export const AdminPage = () => {
                           <th style={{ padding: '0.85rem 1.25rem' }}>Desk #</th>
                           <th style={{ padding: '0.85rem 1.25rem' }}>Zone</th>
                           <th style={{ padding: '0.85rem 1.25rem' }}>Scholar / Occupant</th>
-                          <th style={{ padding: '0.85rem 1.25rem' }}>Rate / Day</th>
                           <th style={{ padding: '0.85rem 1.25rem' }}>Current Status</th>
                           <th style={{ padding: '0.85rem 1.25rem' }}>Actions</th>
                         </tr>
@@ -2795,7 +2767,6 @@ export const AdminPage = () => {
                                   <span style={{ color: '#CBD5E1', fontStyle: 'italic' }}>Unassigned</span>
                                 )}
                               </td>
-                              <td style={{ padding: '0.85rem 1.25rem', fontWeight: 700 }}>NPR {seat.pricePerDay}</td>
                               <td style={{ padding: '0.85rem 1.25rem' }}>
                                 <span style={{
                                   padding: '0.2rem 0.6rem',
@@ -2855,9 +2826,9 @@ export const AdminPage = () => {
                                             seatId: seat.id,
                                             seatNumber: seat.seatNumber,
                                             userName: `Walk-in Guest (${seat.seatNumber})`,
-                                            totalAmount: seat.pricePerDay || 350,
+                                            totalAmount: 500,
                                             amountPaid: 0,
-                                            pendingAmount: seat.pricePerDay || 350,
+                                            pendingAmount: 500,
                                             paymentStatus: 'PENDING',
                                             passType: 'DAILY'
                                           };
@@ -2994,9 +2965,6 @@ export const AdminPage = () => {
                                 {zone.description || 'Quiet study space for scholars'}
                               </div>
                             </div>
-                            <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#D97706', backgroundColor: '#FEF3C7', padding: '0.25rem 0.65rem', borderRadius: '8px' }}>
-                              NPR {zone.pricePerDay} / day
-                            </span>
                           </div>
 
                           {/* Capacity Progress Bar */}
@@ -3026,18 +2994,6 @@ export const AdminPage = () => {
                             }}
                           >
                             <Edit3 size={14} /> Edit Zone
-                          </button>
-
-                          <button
-                            onClick={() => handleSyncZonePriceToSeats(zone.name, zone.pricePerDay)}
-                            style={{
-                              padding: '0.55rem 0.85rem', borderRadius: '8px', border: 'none',
-                              backgroundColor: '#0284C7', color: '#FFFFFF', fontSize: '0.78rem', fontWeight: 700,
-                              cursor: 'pointer'
-                            }}
-                            title="Update daily rate of all desks in this zone to match zone base price"
-                          >
-                            Sync Rate
                           </button>
 
                           <button
@@ -3101,7 +3057,7 @@ export const AdminPage = () => {
                   <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '1.75rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                     {addStationMode === 'SINGLE' ? (
                       <form onSubmit={handleSingleStationSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        <div>
                           <div>
                             <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Station Code *</label>
                             <input
@@ -3143,17 +3099,6 @@ export const AdminPage = () => {
                             </select>
                           </div>
 
-                          <div>
-                            <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Daily Pass Rate (NPR) *</label>
-                            <input
-                              type="number"
-                              required
-                              min="50"
-                              value={singleStationForm.pricePerDay}
-                              onChange={e => setSingleStationForm({ ...singleStationForm, pricePerDay: e.target.value })}
-                              style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' }}
-                            />
-                          </div>
                         </div>
 
                         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
@@ -3208,7 +3153,7 @@ export const AdminPage = () => {
                           </div>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        <div>
                           <div>
                             <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Preset Zone</label>
                             <select
@@ -3220,16 +3165,6 @@ export const AdminPage = () => {
                                 <option key={z.id} value={z.name}>{z.name}</option>
                               ))}
                             </select>
-                          </div>
-                          <div>
-                            <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Preset Price (NPR)</label>
-                            <input
-                              type="number"
-                              required
-                              value={bulkStationForm.pricePerDay}
-                              onChange={e => setBulkStationForm({ ...bulkStationForm, pricePerDay: e.target.value })}
-                              style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' }}
-                            />
                           </div>
                         </div>
 
@@ -3270,12 +3205,6 @@ export const AdminPage = () => {
                             Desk {addStationMode === 'SINGLE' ? (singleStationForm.seatNumber || 'A-09') : `${bulkStationForm.prefix}${String(bulkStationForm.startNum).padStart(2, '0')}`}
                           </h4>
                           <div style={{ fontSize: '0.8rem', color: '#64748B' }}>{addStationMode === 'SINGLE' ? singleStationForm.type : bulkStationForm.type}</div>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0F172A' }}>
-                            NPR {addStationMode === 'SINGLE' ? singleStationForm.pricePerDay : bulkStationForm.pricePerDay}
-                          </div>
-                          <div style={{ fontSize: '0.7rem', color: '#64748B' }}>per day</div>
                         </div>
                       </div>
                     </div>
@@ -5246,17 +5175,12 @@ export const AdminPage = () => {
                   <select
                     value={seatForm.zone}
                     onChange={e => {
-                      const selectedZ = zones.find(z => z.name === e.target.value);
-                      setSeatForm({ 
-                        ...seatForm, 
-                        zone: e.target.value,
-                        pricePerDay: selectedZ ? selectedZ.pricePerDay : seatForm.pricePerDay
-                      });
+                      setSeatForm({ ...seatForm, zone: e.target.value });
                     }}
                     style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', fontWeight: 600, boxSizing: 'border-box' }}
                   >
-                    {zones.map(z => (
-                      <option key={z.id} value={z.name}>{z.name} (NPR {z.pricePerDay}/day)</option>
+                      {zones.map(z => (
+                        <option key={z.id} value={z.name}>{z.name}</option>
                     ))}
                   </select>
                 </div>
@@ -5274,17 +5198,6 @@ export const AdminPage = () => {
                   />
                 </div>
 
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Daily Rate (NPR) *</label>
-                  <input
-                    type="number"
-                    required
-                    min="50"
-                    value={seatForm.pricePerDay}
-                    onChange={e => setSeatForm({ ...seatForm, pricePerDay: e.target.value })}
-                    style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', fontWeight: 700, boxSizing: 'border-box' }}
-                  />
-                </div>
               </div>
 
               <div>
@@ -5389,17 +5302,6 @@ export const AdminPage = () => {
                   />
                 </div>
 
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Base Rate (NPR / Day) *</label>
-                  <input
-                    type="number"
-                    required
-                    min="50"
-                    value={zoneForm.pricePerDay}
-                    onChange={e => setZoneForm({ ...zoneForm, pricePerDay: e.target.value })}
-                    style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', fontWeight: 700, boxSizing: 'border-box' }}
-                  />
-                </div>
               </div>
 
               <div>

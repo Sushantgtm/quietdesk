@@ -75,7 +75,8 @@ export const BookingPage = () => {
   const [formData, setFormData] = useState({
     userName: '',
     userEmail: '',
-    userPhone: ''
+    userPhone: '',
+    userAddress: ''
   });
   const [confirmedBooking, setConfirmedBooking] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -200,6 +201,7 @@ export const BookingPage = () => {
         userName: formData.userName,
         userEmail: formData.userEmail,
         userPhone: formData.userPhone,
+        userAddress: formData.userAddress,
         totalAmount: calculateTotal(),
         status: 'PENDING',
         bookingType: 'WEBSITE_BOOKING'
@@ -558,6 +560,28 @@ export const BookingPage = () => {
                   </div>
                 </div>
 
+                <div>
+                  <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--primary)' }}>
+                    Address *
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Lazimpat, Kathmandu"
+                      value={formData.userAddress}
+                      onChange={(e) => setFormData({ ...formData, userAddress: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '0.85rem 1rem',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--border-subtle)',
+                        fontSize: '1rem'
+                      }}
+                    />
+                  </div>
+                </div>
+
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--primary)' }}>
@@ -722,6 +746,10 @@ export const BookingPage = () => {
                   <div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Phone Number</div>
                     <div style={{ fontSize: '1rem', fontWeight: 600 }}>{formData.userPhone}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Address</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 600 }}>{formData.userAddress}</div>
                   </div>
                 </div>
 

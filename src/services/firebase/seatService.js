@@ -1,6 +1,7 @@
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
 import { MOCK_SEATS } from '../mock/mockData';
+import { SEAT_NUMBER_BY_PHYSICAL_ID } from '../mock/seatLayout';
 
 const LOCAL_STORAGE_SEATS_KEY = 'quietdesk_seats_v4';
 
@@ -24,12 +25,21 @@ export const saveLocalSeats = (seats) => {
 export const seedSeatsToFirestore = async () => {
   try {
     for (const seat of MOCK_SEATS) {
-      await setDoc(doc(db, 'seats', seat.id), seat, { merge: true });
+      const { pricePerDay, ...seatWithoutPrice } = seat;
+      await setDoc(doc(db, 'seats', seat.id), seatWithoutPrice, { merge: true });
     }
     console.log('Successfully seeded seats to Firestore');
   } catch (e) {
     console.warn('Unable to seed Firestore seats:', e.message);
   }
+};
+
+const normalizeSeatNumber = (seat) => {
+  const physicalId = String(seat.id || '').replace(/^seat_/, '').toUpperCase();
+  return {
+    ...seat,
+    seatNumber: SEAT_NUMBER_BY_PHYSICAL_ID[physicalId] || seat.seatNumber
+  };
 };
 
 export const subscribeSeatAvailability = (onSeatsUpdate) => {
@@ -41,7 +51,7 @@ export const subscribeSeatAvailability = (onSeatsUpdate) => {
         seedSeatsToFirestore();
         onSeatsUpdate(getLocalSeats());
       } else {
-        const firestoreSeats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const firestoreSeats = snapshot.docs.map(doc => normalizeSeatNumber({ id: doc.id, ...doc.data() }));
         saveLocalSeats(firestoreSeats);
         onSeatsUpdate(firestoreSeats);
       }
@@ -82,7 +92,6 @@ export const createSeatInFirestore = async (seatData) => {
     seatNumber: seatData.seatNumber || 'A1',
     zone: seatData.zone || 'Left Quiet Row (Zone A)',
     type: seatData.type || 'Single Desk',
-    pricePerDay: Number(seatData.pricePerDay) || 500,
     status: seatData.status || 'AVAILABLE',
     features: Array.isArray(seatData.features) ? seatData.features : (seatData.features ? seatData.features.split(',').map(s => s.trim()) : ['Power Outlet', 'Reading Light']),
     createdAt: new Date().toISOString()

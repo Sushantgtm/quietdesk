@@ -94,6 +94,7 @@ export const createBooking = async (bookingData) => {
         fullName:  bookingData.userName  || 'Scholar',
         email:     bookingData.userEmail || '',
         phone:     bookingData.userPhone || '',
+        address:   bookingData.userAddress || '',
         passType:  bookingData.passType  || 'DAILY',
       });
       if (studentRes?.user) {
@@ -154,6 +155,7 @@ export const createBooking = async (bookingData) => {
     userName,
     userEmail:    bookingData.userEmail    || '',
     userPhone:    bookingData.userPhone    || '',
+    userAddress:  bookingData.userAddress  || '',
     seatId:       bookingData.seatId,
     seatNumber:   bookingData.seatNumber   || '',
     zone:         bookingData.zone         || '',

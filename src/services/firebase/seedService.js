@@ -1,9 +1,10 @@
-import { doc, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, deleteField, doc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { MOCK_USERS } from './userService';
 import { MOCK_SEATS, MOCK_LOCKERS, MOCK_BOOKINGS, ACCESS_PLANS } from '../mock/mockData';
 import { INITIAL_ZONES, resetAndSeedZonesInFirestore } from './zoneService';
 import { INITIAL_FAQS } from './faqService';
+import { SEAT_NUMBER_BY_PHYSICAL_ID } from '../mock/seatLayout';
 
 export const MOCK_SEATS_DATA = MOCK_SEATS;
 export const MOCK_LOCKERS_DATA = MOCK_LOCKERS;
@@ -46,17 +47,72 @@ export const MOCK_BRANCHES_DATA = [
   }
 ];
 
+const renumberExistingSeatReferences = async () => {
+  const oldToNewSeatId = { seat_T1: 'seat_R16' };
+  const oldToNewNumber = { T1: 47 };
+
+  Object.entries(SEAT_NUMBER_BY_PHYSICAL_ID).forEach(([physicalId, number]) => {
+    oldToNewNumber[physicalId] = number;
+  });
+
+  const [seatsSnapshot, bookingsSnapshot, usersSnapshot, lockersSnapshot] = await Promise.all([
+    getDocs(collection(db, 'seats')),
+    getDocs(collection(db, 'bookings')),
+    getDocs(collection(db, 'users')),
+    getDocs(collection(db, 'lockers'))
+  ]);
+
+  await Promise.all(seatsSnapshot.docs.map((seatDoc) => {
+    const seat = seatDoc.data();
+    const physicalId = String(seat.seatNumber || '').toUpperCase();
+    const number = oldToNewNumber[physicalId];
+    if (seatDoc.id === 'seat_T1') return deleteDoc(seatDoc.ref);
+    return number ? updateDoc(seatDoc.ref, { seatNumber: number, pricePerDay: deleteField() }) : Promise.resolve();
+  }));
+
+  await Promise.all(bookingsSnapshot.docs.map((bookingDoc) => {
+    const booking = bookingDoc.data();
+    const physicalId = String(booking.seatNumber || '').toUpperCase();
+    const updates = {};
+    if (oldToNewNumber[physicalId]) updates.seatNumber = oldToNewNumber[physicalId];
+    if (oldToNewSeatId[booking.seatId]) updates.seatId = oldToNewSeatId[booking.seatId];
+    return Object.keys(updates).length ? updateDoc(bookingDoc.ref, updates) : Promise.resolve();
+  }));
+
+  await Promise.all(usersSnapshot.docs.map((userDoc) => {
+    const user = userDoc.data();
+    const physicalId = String(user.seatNumber || '').toUpperCase();
+    const number = oldToNewNumber[physicalId];
+    if (!number) return Promise.resolve();
+    return updateDoc(userDoc.ref, {
+      seatNumber: number,
+      assignedSeat: `Desk ${number}`
+    });
+  }));
+
+  await Promise.all(lockersSnapshot.docs.map((lockerDoc) => {
+    const locker = lockerDoc.data();
+    const physicalId = String(locker.assignedSeatNumber || '').toUpperCase();
+    const number = oldToNewNumber[physicalId];
+    return number ? updateDoc(lockerDoc.ref, { assignedSeatNumber: number }) : Promise.resolve();
+  }));
+};
+
 export const seedAllCollectionsToFirestore = async () => {
   const summary = { seats: 0, lockers: 0, zones: 0, bookings: 0, plans: 0, admins: 0, amenities: 0, branches: 0, users: 0, faqs: 0 };
 
   try {
+    // Migrate existing records before writing the new numeric station labels.
+    await renumberExistingSeatReferences();
+
     // 1. Delete legacy zones from Firestore and re-seed the 5 official floor plan zones
     const zoneResetResult = await resetAndSeedZonesInFirestore();
     summary.zones = zoneResetResult.count || INITIAL_ZONES.length;
 
     // 2. Seed 62 Seats matching exact 5 floor layout zones
     for (const seat of MOCK_SEATS_DATA) {
-      await setDoc(doc(db, 'seats', seat.id), seat, { merge: true });
+      const { pricePerDay, ...seatWithoutPrice } = seat;
+      await setDoc(doc(db, 'seats', seat.id), seatWithoutPrice, { merge: true });
       summary.seats++;
     }
 

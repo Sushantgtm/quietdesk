@@ -42,22 +42,14 @@ export const SeatMap = () => {
     }
   };
 
-  // Natural sort helper (e.g., A1, A2 ... A10, A11)
-  const naturalSort = (a, b) => {
-    return (a.seatNumber || '').localeCompare(b.seatNumber || '', undefined, { numeric: true, sensitivity: 'base' });
-  };
-
-  // Group filtered seats by zone and sort naturally
+  const naturalSort = (a, b) => String(a.seatNumber || '').localeCompare(String(b.seatNumber || ''), undefined, { numeric: true, sensitivity: 'base' });
   const grouped = filteredSeats.reduce((acc, seat) => {
     const zoneName = seat.zone || 'Other Study Area';
     if (!acc[zoneName]) acc[zoneName] = [];
     acc[zoneName].push(seat);
     return acc;
   }, {});
-
-  Object.keys(grouped).forEach(zoneKey => {
-    grouped[zoneKey].sort(naturalSort);
-  });
+  Object.keys(grouped).forEach(zoneKey => grouped[zoneKey].sort(naturalSort));
 
   return (
     <section id="seats" className="section">
@@ -144,7 +136,7 @@ export const SeatMap = () => {
           })}
         </div>
 
-        {/* Floor Map - Grouped by Zone */}
+        {/* Floor Map - Responsive zone cards */}
         {loading ? (
           <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
             Loading live availability from Firestore...
@@ -152,100 +144,27 @@ export const SeatMap = () => {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
             {Object.entries(grouped).map(([zone, zoneSeats]) => {
-              const meta = ZONE_META[zone] || { color: '#4A3C2B', light: '#F5EFE4', accent: '#C9A574', icon: '🏢', rate: 500 };
+              const meta = ZONE_META[zone] || { color: '#4A3C2B', light: '#F5EFE4', accent: '#C9A574', icon: '🏢' };
               const zoneAvail = zoneSeats.filter(s => s.status === 'AVAILABLE').length;
               return (
                 <div key={zone} style={{ borderRadius: '20px', overflow: 'hidden', border: `1.5px solid ${meta.accent}22`, background: 'var(--bg-surface)' }}>
-                  {/* Zone Header */}
-                  <div style={{
-                    padding: '1rem 1.5rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    background: `linear-gradient(135deg, ${meta.color}11 0%, ${meta.light} 100%)`,
-                    borderBottom: `1px solid ${meta.accent}22`
-                  }}>
+                  <div style={{ padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: `linear-gradient(135deg, ${meta.color}11 0%, ${meta.light} 100%)`, borderBottom: `1px solid ${meta.accent}22` }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                       <span style={{ fontSize: '1.4rem' }}>{meta.icon}</span>
-                      <div>
-                        <div style={{ fontWeight: 700, color: meta.color, fontSize: '1rem' }}>{zone}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{zoneSeats.length} desks</div>
-                      </div>
+                      <div><div style={{ fontWeight: 700, color: meta.color, fontSize: '1rem' }}>{zone}</div><div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{zoneSeats.length} desks</div></div>
                     </div>
-                    <div style={{
-                      padding: '0.3rem 0.85rem',
-                      borderRadius: '100px',
-                      fontSize: '0.78rem',
-                      fontWeight: 700,
-                      background: zoneAvail > 0 ? '#DCFCE7' : '#FEE2E2',
-                      color: zoneAvail > 0 ? '#166534' : '#991B1B'
-                    }}>
-                      {zoneAvail} open
-                    </div>
+                    <div style={{ padding: '0.3rem 0.85rem', borderRadius: '100px', fontSize: '0.78rem', fontWeight: 700, background: zoneAvail > 0 ? '#DCFCE7' : '#FEE2E2', color: zoneAvail > 0 ? '#166534' : '#991B1B' }}>{zoneAvail} open</div>
                   </div>
-
-                  {/* Desk Grid */}
-                  <div style={{
-                    padding: '1.25rem',
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))',
-                    gap: '0.75rem'
-                  }}>
+                  <div style={{ padding: '1.25rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '0.75rem' }}>
                     {zoneSeats.map(seat => {
                       const isAvail = seat.status === 'AVAILABLE';
-                      const isOcc   = seat.status === 'OCCUPIED';
+                      const isOcc = seat.status === 'OCCUPIED';
                       const dot = STATUS_DOT[seat.status] || STATUS_DOT.OCCUPIED;
                       return (
-                        <button
-                          key={seat.id}
-                          onClick={() => handleSeatClick(seat)}
-                          disabled={!isAvail}
-                          className={`desk-btn${isAvail ? ' available' : ''}`}
-                          title={`Desk ${seat.seatNumber} · ${seat.status}`}
-                          style={{
-                            borderRadius: '14px',
-                            padding: '0.85rem 0.5rem',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '0.3rem',
-                            background: isAvail
-                              ? '#FFFFFF'
-                              : isOcc
-                              ? `${meta.color}CC`
-                              : `${meta.accent}22`,
-                            border: isAvail
-                              ? `2px solid ${meta.accent}`
-                              : isOcc
-                              ? `2px solid ${meta.color}`
-                              : `1.5px dashed ${meta.accent}88`,
-                            opacity: isOcc ? 0.75 : 1,
-                          }}
-                        >
-                          <div style={{
-                            width: '8px', height: '8px',
-                            borderRadius: '50%',
-                            background: dot.bg
-                          }} />
-                          <span style={{
-                            fontFamily: 'var(--font-headline)',
-                            fontSize: '1.15rem',
-                            fontWeight: 800,
-                            color: isOcc ? '#FFFFFF' : meta.color,
-                            lineHeight: 1
-                          }}>
-                            {seat.seatNumber}
-                          </span>
-                          <span style={{
-                            fontSize: '0.6rem',
-                            textTransform: 'uppercase',
-                            fontWeight: 700,
-                            letterSpacing: '0.04em',
-                            color: isOcc ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)'
-                          }}>
-                            {isAvail ? 'Open' : isOcc ? 'Taken' : 'Hold'}
-                          </span>
+                        <button key={seat.id} onClick={() => handleSeatClick(seat)} disabled={!isAvail} className={`desk-btn${isAvail ? ' available' : ''}`} title={`Desk ${seat.seatNumber} · ${seat.status}`} style={{ borderRadius: '14px', padding: '0.85rem 0.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', background: isAvail ? '#FFFFFF' : isOcc ? `${meta.color}CC` : `${meta.accent}22`, border: isAvail ? `2px solid ${meta.accent}` : isOcc ? `2px solid ${meta.color}` : `1.5px dashed ${meta.accent}88`, opacity: isOcc ? 0.75 : 1 }}>
+                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: dot.bg }} />
+                          <span style={{ fontFamily: 'var(--font-headline)', fontSize: '1.15rem', fontWeight: 800, color: isOcc ? '#FFFFFF' : meta.color, lineHeight: 1 }}>{seat.seatNumber}</span>
+                          <span style={{ fontSize: '0.6rem', textTransform: 'uppercase', fontWeight: 700, color: isOcc ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)' }}>{isAvail ? 'Open' : isOcc ? 'Taken' : 'Hold'}</span>
                         </button>
                       );
                     })}

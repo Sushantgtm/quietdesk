@@ -201,6 +201,7 @@ export const ReservationConfirmModal = ({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.78rem', color: '#475569' }}>
               <div>📞 Phone: <strong>{booking.userPhone || '—'}</strong></div>
               <div>📧 Email: <strong>{booking.userEmail || '—'}</strong></div>
+              <div style={{ gridColumn: '1 / -1' }}>⌂ Address: <strong>{booking.userAddress || '—'}</strong></div>
             </div>
           </div>
 

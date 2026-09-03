@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { DoorOpen, Lock, Key, User, CheckCircle2, AlertCircle, Clock, Sparkles, MapPin, Compass, Phone, ShieldCheck } from 'lucide-react';
+import { SEAT_LAYOUT, SEAT_NUMBER_BY_PHYSICAL_ID } from '../../services/mock/seatLayout';
 
 export const StudyRoomFloorPlan = ({
   seats = [],
@@ -14,7 +15,8 @@ export const StudyRoomFloorPlan = ({
   // Map Firestore / context seats by seatNumber for O(1) lookup
   const seatMap = {};
   seats.forEach(s => {
-    if (s && s.seatNumber) {
+    if (s) {
+      seatMap[s.id] = s;
       seatMap[s.seatNumber] = s;
     }
   });
@@ -50,16 +52,17 @@ export const StudyRoomFloorPlan = ({
   const availableLockers = Math.max(0, totalLockers - assignedLockers - maintLockers);
 
   // Render an individual Cabin Box
-  const renderCabin = (seatNum, defaultZone = 'Left Quiet Row (Zone A)', defaultRate = 500) => {
-    const seat = seatMap[seatNum] || {
-      id: `seat_${seatNum}`,
-      seatNumber: seatNum,
+  const renderCabin = (physicalSeatId, defaultZone = 'Left Quiet Row (Zone A)', defaultRate = 500) => {
+    const seatNumber = SEAT_NUMBER_BY_PHYSICAL_ID[physicalSeatId];
+    const seat = seatMap[`seat_${physicalSeatId}`] || {
+      id: `seat_${physicalSeatId}`,
+      seatNumber,
       zone: defaultZone,
       pricePerDay: defaultRate,
       status: 'AVAILABLE'
     };
 
-    const occupant = occupantMap[seatNum] || occupantMap[seat.id];
+    const occupant = occupantMap[seatNumber] || occupantMap[physicalSeatId] || occupantMap[seat.id];
     const status = seat.status || (occupant ? occupant.status : 'AVAILABLE');
 
     let bg = '#FFFFFF';
@@ -90,9 +93,9 @@ export const StudyRoomFloorPlan = ({
 
     return (
       <div
-        key={seatNum}
+        key={physicalSeatId}
         onClick={() => onSelectCabin && onSelectCabin(seat)}
-        onMouseEnter={() => setHoveredItem({ type: 'CABIN', data: { ...seat, occupant } })}
+        onMouseEnter={() => setHoveredItem({ type: 'CABIN', data: { ...seat, seatNumber, occupant } })}
         onMouseLeave={() => setHoveredItem(null)}
         style={{
           backgroundColor: bg,
@@ -113,7 +116,7 @@ export const StudyRoomFloorPlan = ({
         }}
       >
         <span style={{ fontSize: '0.85rem', fontWeight: 800, color: text, fontFamily: 'Inter, sans-serif' }}>
-          {seatNum}
+          {seatNumber}
         </span>
         <span style={{
           fontSize: '0.62rem',
@@ -399,7 +402,7 @@ export const StudyRoomFloorPlan = ({
           
           {/* ══════════════════════════════════════════════════════════════
               1. LEFT WALL ROW (13 Seats + Locker L-01)
-              Sequence: 8 Seats (A1–A8) -> Locker (L-01) -> 5 Seats (A9–A13)
+              Sequence: 13 numbered seats (28–40)
              ══════════════════════════════════════════════════════════════ */}
           <div style={{
             display: 'flex',
@@ -412,12 +415,12 @@ export const StudyRoomFloorPlan = ({
             alignItems: 'center'
           }}>
             <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', marginBottom: '0.2rem', textAlign: 'center' }}>
-              Left Wall (A1–A13)
+              Left Wall (Stations 28–40)
             </div>
 
             {/* All 13 Left Wall Cabins Contiguous */}
-            {['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11', 'A12', 'A13'].map(seatNum =>
-              renderCabin(seatNum, 'Left Quiet Row (Zone A)', 500)
+            {SEAT_LAYOUT.leftWall.map(physicalSeatId =>
+              renderCabin(physicalSeatId, 'Left Quiet Row (Zone A)', 500)
             )}
           </div>
 
@@ -446,7 +449,7 @@ export const StudyRoomFloorPlan = ({
           {/* ══════════════════════════════════════════════════════════════
               2. CENTER SECTION (34 Seats Total)
               - Double Column (24 Seats: 12 Left C1-C12, 12 Right C13-C24)
-              - Reverse-T Wing Base (4 Seats: T1-T4)
+              - Reverse-T Wing Base (3 Seats: T2-T4)
               - Below Reverse-T Row (6 Seats: B1-B6)
              ══════════════════════════════════════════════════════════════ */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', alignItems: 'center' }}>
@@ -474,10 +477,10 @@ export const StudyRoomFloorPlan = ({
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'center', gap: '1.25rem' }}>
-                {/* Left Side: 12 Cabins (C1 to C12) */}
+                {/* Left Side: stations 16 to 27 */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                  {['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9', 'C10', 'C11', 'C12'].map(seatNum =>
-                    renderCabin(seatNum, 'Center Focus Row (Zone C)', 600)
+                  {SEAT_LAYOUT.centerLeft.map(physicalSeatId =>
+                    renderCabin(physicalSeatId, 'Center Focus Row (Zone C)', 600)
                   )}
                 </div>
 
@@ -489,16 +492,16 @@ export const StudyRoomFloorPlan = ({
                   margin: '0 0.25rem'
                 }} />
 
-                {/* Right Side: 12 Cabins (C13 to C24) */}
+                {/* Right Side: stations 1 to 12 */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                  {['C13', 'C14', 'C15', 'C16', 'C17', 'C18', 'C19', 'C20', 'C21', 'C22', 'C23', 'C24'].map(seatNum =>
-                    renderCabin(seatNum, 'Center Focus Row (Zone C)', 600)
+                  {SEAT_LAYOUT.centerRight.map(physicalSeatId =>
+                    renderCabin(physicalSeatId, 'Center Focus Row (Zone C)', 600)
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Reverse-T Shape Wing (4 Cabins: T1 to T4) */}
+            {/* Reverse-T Shape Wing (3 Cabins: T2 to T4) */}
             <div style={{
               backgroundColor: '#FFFFFF',
               border: '2px solid #CBD5E1',
@@ -508,11 +511,11 @@ export const StudyRoomFloorPlan = ({
               boxSizing: 'border-box'
             }}>
               <div style={{ textAlign: 'center', fontSize: '0.7rem', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                ┴ Reverse-T Wing (4 Cabins) ┴
+                ┴ Reverse-T Wing (3 Cabins) ┴
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
-                {['T1', 'T2', 'T3', 'T4'].map(seatNum =>
-                  renderCabin(seatNum, 'Center T-Wing Section (Zone T)', 550)
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+                {SEAT_LAYOUT.tWing.map(physicalSeatId =>
+                  renderCabin(physicalSeatId, 'Center T-Wing Section (Zone T)', 550)
                 )}
               </div>
             </div>
@@ -530,8 +533,8 @@ export const StudyRoomFloorPlan = ({
                 South Baseline (6 Cabins)
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0.4rem' }}>
-                {['B1', 'B2', 'B3', 'B4', 'B5', 'B6'].map(seatNum =>
-                  renderCabin(seatNum, 'South Baseline Row (Zone B)', 450)
+                {SEAT_LAYOUT.baseline.map(physicalSeatId =>
+                  renderCabin(physicalSeatId, 'South Baseline Row (Zone B)', 450)
                 )}
               </div>
             </div>
@@ -560,7 +563,7 @@ export const StudyRoomFloorPlan = ({
           </div>
 
           {/* ══════════════════════════════════════════════════════════════
-              3. RIGHT WALL ROW (15 Seats + 4 Lockers L-02 to L-05)
+              3. RIGHT WALL ROW (16 Seats + 4 Lockers L-02 to L-05)
               Sequence: 3 Seats -> Locker -> 3 Seats -> Locker -> 3 Seats -> Locker -> 3 Seats -> Locker -> 3 Seats
              ══════════════════════════════════════════════════════════════ */}
           <div style={{
@@ -574,12 +577,12 @@ export const StudyRoomFloorPlan = ({
             alignItems: 'center'
           }}>
             <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', marginBottom: '0.2rem', textAlign: 'center' }}>
-              Right Wall (R1–R15)
+              Right Wall (Stations 47–62)
             </div>
 
-            {/* All 15 Right Window Wall Cabins Contiguous */}
-            {['R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10', 'R11', 'R12', 'R13', 'R14', 'R15'].map(seatNum =>
-              renderCabin(seatNum, 'Right Window Wall (Zone R)', 700)
+            {/* All 16 Right Window Wall Cabins Contiguous */}
+            {SEAT_LAYOUT.rightWall.map(physicalSeatId =>
+              renderCabin(physicalSeatId, 'Right Window Wall (Zone R)', 700)
             )}
           </div>
         </div>

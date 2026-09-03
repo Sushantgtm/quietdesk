@@ -7,33 +7,30 @@ export const INITIAL_ZONES = [
     name: 'Left Quiet Row (Zone A)', 
     shortName: 'Zone A (Left Wall)',
     prefix: 'A',
-    cabinRange: 'A1 - A13',
+    cabinRange: 'Stations 28 - 40',
     capacity: 13, 
-    pricePerDay: 500, 
     features: ['Power Outlet', 'Reading Lamp', 'Ergonomic Chair'],
-    description: 'Quiet individual study desks along the left perimeter wall (Desks A1–A13) with private warm lamps and dual AC sockets.' 
+    description: 'Quiet individual study desks along the left perimeter wall (Stations 28–40) with private warm lamps and dual AC sockets.' 
   },
   { 
     id: 'zone_c_center', 
     name: 'Center Focus Row (Zone C)', 
     shortName: 'Zone C (Center Focus)',
     prefix: 'C',
-    cabinRange: 'C1 - C24',
+    cabinRange: 'Stations 1 - 27',
     capacity: 24, 
-    pricePerDay: 600, 
     features: ['Acoustic Soundproof Spine', 'Power Outlet', 'Reading Lamp', 'Ergonomic Chair'],
-    description: 'Central acoustic focus cabins (Desks C1–C24) separated by a central soundproof spine for maximum study concentration.' 
+    description: 'Central acoustic focus cabins (Stations 1–12 and 16–27) separated by a central soundproof spine for maximum study concentration.' 
   },
   { 
     id: 'zone_t_wing', 
     name: 'Center T-Wing Section (Zone T)', 
     shortName: 'Zone T (T-Wing)',
     prefix: 'T',
-    cabinRange: 'T1 - T4',
-    capacity: 4, 
-    pricePerDay: 550, 
+    cabinRange: 'Stations 13 - 15',
+    capacity: 3, 
     features: ['Wide Desk Surface', 'Dual Notebook Space', 'Power Outlet', 'Ergonomic Chair'],
-    description: 'Spacious reverse-T wing study stations (Desks T1–T4) at the base of the center column, ideal for multiple open textbooks.' 
+    description: 'Spacious reverse-T wing study stations (Stations 13–15) at the base of the center column, ideal for multiple open textbooks.' 
   },
   { 
     id: 'zone_b_south', 
@@ -42,20 +39,18 @@ export const INITIAL_ZONES = [
     prefix: 'B',
     cabinRange: 'B1 - B6',
     capacity: 6, 
-    pricePerDay: 450, 
     features: ['Rapid Entrance Access', 'Power Outlet', 'Reading Lamp'],
-    description: 'South baseline open study row (Desks B1–B6) with quick reception access and dedicated reading lighting.' 
+    description: 'South baseline open study row (Stations 41–46) with quick reception access and dedicated reading lighting.' 
   },
   { 
     id: 'zone_r_window', 
     name: 'Right Window Wall (Zone R)', 
     shortName: 'Zone R (Window Wall)',
     prefix: 'R',
-    cabinRange: 'R1 - R15',
-    capacity: 15, 
-    pricePerDay: 700, 
+    cabinRange: 'Stations 47 - 62',
+    capacity: 16, 
     features: ['Kathmandu Panoramic Window View', 'Natural Daylight', 'Power Outlet', 'Ergonomic Chair'],
-    description: 'Premium window view stations (Desks R1–R15) along the floor-to-ceiling glass wall overlooking Kathmandu.' 
+    description: 'Premium window view stations (Stations 47–62) along the floor-to-ceiling glass wall overlooking Kathmandu.' 
   }
 ];
 
@@ -178,7 +173,6 @@ export const createZoneInFirestore = async (zoneData) => {
     id: newId,
     name: zoneData.name || 'New Study Zone',
     capacity: Number(zoneData.capacity) || 10,
-    pricePerDay: Number(zoneData.pricePerDay) || 500,
     description: zoneData.description || 'Standard quiet study zone',
     createdAt: new Date().toISOString()
   };
