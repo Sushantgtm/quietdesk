@@ -47,6 +47,7 @@ export const StudentProfileModal = ({
   onDeactivateUser,
   onPrintReceipt,
 }) => {
+  // ── HOOKS (MUST ALL BE AT THE TOP UNCONDITIONALLY) ──
   const [activeTab, setActiveTab] = useState('profile');
   const [isChangingCabin, setIsChangingCabin] = useState(false);
   const [selectedNewSeatId, setSelectedNewSeatId] = useState('');
@@ -74,7 +75,7 @@ export const StudentProfileModal = ({
 
   // Current active or confirmed booking
   const activeBooking = useMemo(() =>
-    userBookings.find(b => ['CONFIRMED', 'CHECKED_IN', 'APPROVED', 'RESERVED', 'ACTIVE'].includes(b.status)),
+    userBookings.find(b => ['CONFIRMED', 'CHECKED_IN', 'APPROVED', 'RESERVED', 'ACTIVE'].includes(b?.status)),
     [userBookings]
   );
 
@@ -83,7 +84,7 @@ export const StudentProfileModal = ({
     if (!user) return null;
     const cleanUserPhone = String(user.phone || '').replace(/\D/g, '');
     return (lockers || []).find(l =>
-      l.status === 'ASSIGNED' &&
+      l?.status === 'ASSIGNED' &&
       ((user.id && l.assignedToUserId === user.id) ||
        (cleanUserPhone && l.assignedToUserPhone && String(l.assignedToUserPhone).replace(/\D/g, '') === cleanUserPhone))
     );
@@ -91,35 +92,77 @@ export const StudentProfileModal = ({
 
   // Active seat details
   const activeSeat = useMemo(() =>
-    activeBooking ? (seats || []).find(s => s.id === activeBooking.seatId || s.seatNumber === activeBooking.seatNumber) : null,
+    activeBooking ? (seats || []).find(s => s?.id === activeBooking.seatId || s?.seatNumber === activeBooking.seatNumber) : null,
     [activeBooking, seats]
   );
 
   // Available seats for changing cabin
   const availableSeats = useMemo(() =>
-    (seats || []).filter(s => s.status === 'AVAILABLE'),
+    (seats || []).filter(s => s?.status === 'AVAILABLE'),
     [seats]
   );
 
   // Financial aggregates
   const totalPaid = useMemo(() =>
-    userBookings.reduce((s, b) => s + (Number(b.amountPaid) || (b.paymentStatus === 'PAID' ? Number(b.totalAmount) || 0 : 0)), 0),
+    userBookings.reduce((s, b) => s + (Number(b?.amountPaid) || (b?.paymentStatus === 'PAID' ? Number(b?.totalAmount) || 0 : 0)), 0),
     [userBookings]
   );
   const totalDue = useMemo(() =>
-    userBookings.reduce((s, b) => s + Math.max(0, Number(b.pendingAmount) || 0), 0),
+    userBookings.reduce((s, b) => s + Math.max(0, Number(b?.pendingAmount) || 0), 0),
     [userBookings]
   );
   const totalRevenue = useMemo(() =>
-    userBookings.reduce((s, b) => s + (Number(b.totalAmount) || 0), 0),
+    userBookings.reduce((s, b) => s + (Number(b?.totalAmount) || 0), 0),
     [userBookings]
   );
 
+  // Calculated preview of new expiry date based on selected package (Unconditionally called at top)
+  const renewalExpiryPreview = useMemo(() => {
+    return calculateRenewalEndDate(activeBooking?.endDate, selectedRenewalPackage);
+  }, [activeBooking?.endDate, selectedRenewalPackage]);
+
+  // Safe Date Formatter helper
+  const safeFormatDate = (val) => {
+    if (!val) return '—';
+    try {
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return String(val);
+      return d.toLocaleDateString('en-NP', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch (_) {
+      return String(val);
+    }
+  };
+
+  // ── EARLY RETURNS AFTER ALL HOOKS ──
   if (!user) return null;
 
-  const displayName = user.fullName || user.name || 'Scholar';
-  const initials = String(displayName)
-    .trim()
+  // If user object has no identifying details, show helpful not-found dialog instead of crashing
+  if (!user.id && !user.fullName && !user.name && !user.phone && !user.email) {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.75)', backdropFilter: 'blur(6px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem'
+      }}>
+        <div style={{ backgroundColor: '#FFF', borderRadius: '16px', padding: '2rem', maxWidth: '440px', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)' }}>
+          <AlertCircle size={44} style={{ color: '#DC2626', margin: '0 auto 1rem' }} />
+          <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0F172A', marginBottom: '0.5rem' }}>Student Profile Not Found</h3>
+          <p style={{ fontSize: '0.85rem', color: '#64748B', lineHeight: 1.5, marginBottom: '1.5rem' }}>
+            No student profile record could be found for this cabin or reservation. The student may not be registered yet.
+          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ padding: '0.6rem 1.5rem', backgroundColor: '#0F172A', color: '#FFF', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const displayName = String(user.fullName || user.name || 'Scholar').trim() || 'Scholar';
+  const initials = displayName
     .split(/\s+/)
     .map(w => w[0] || '')
     .join('')
@@ -132,11 +175,6 @@ export const StudentProfileModal = ({
   const isDiscontinued = user.status === 'DISCONTINUED' || user.membershipStatus === 'DISCONTINUED';
   const hasLiveBooking = userBookings.some(b => !['CANCELLED', 'COMPLETED', 'REJECTED'].includes(b.status) && (!b.endDate || b.endDate >= todayStr));
   const userStatus = isDiscontinued ? 'DISCONTINUED' : (hasLiveBooking ? 'ACTIVE' : (user.membershipStatus || user.status || 'INACTIVE'));
-
-  // Calculated preview of new expiry date based on selected package
-  const renewalExpiryPreview = useMemo(() => {
-    return calculateRenewalEndDate(activeBooking?.endDate, selectedRenewalPackage);
-  }, [activeBooking?.endDate, selectedRenewalPackage]);
 
   // Handler: Change Cabin
   const handleConfirmChangeCabin = async () => {
@@ -408,13 +446,13 @@ export const StudentProfileModal = ({
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
                 {[
-                  { icon: <User size={14} />, label: 'Student ID', value: user.userCode || user.id },
-                  { icon: <Phone size={14} />, label: 'Phone Number', value: user.phone || '—' },
-                  { icon: <Mail size={14} />, label: 'Email Address', value: user.email || '—' },
-                  { icon: <MapPin size={14} />, label: 'Physical Address', value: user.address || 'Kathmandu, Nepal' },
+                  { icon: <User size={14} />, label: 'Student ID', value: user.userCode || user.id || 'QD-STU' },
+                  { icon: <Phone size={14} />, label: 'Phone Number', value: user.phone ? String(user.phone) : '—' },
+                  { icon: <Mail size={14} />, label: 'Email Address', value: user.email ? String(user.email) : '—' },
+                  { icon: <MapPin size={14} />, label: 'Physical Address', value: user.address ? String(user.address) : 'Kathmandu, Nepal' },
                   { icon: <Shield size={14} />, label: 'Emergency Contact', value: user.emergencyContact ? `${user.emergencyContact}${user.emergencyRelation ? ` (${user.emergencyRelation})` : ''}` : '—' },
                   { icon: <FileText size={14} />, label: 'ID Proof / Document', value: user.idProof || 'Verified ID on File' },
-                  { icon: <Calendar size={14} />, label: 'Joined / Registered Date', value: user.joinedDate || user.createdAt ? new Date(user.joinedDate || user.createdAt).toLocaleDateString('en-NP', { day: '2-digit', month: 'short', year: 'numeric' }) : '—' },
+                  { icon: <Calendar size={14} />, label: 'Joined / Registered Date', value: safeFormatDate(user.joinedDate || user.createdAt) },
                   { icon: <Car size={14} />, label: 'Parking Facility', value: activeBooking?.parkingNeeded || user.parkingNeeded ? `Yes (${activeBooking?.vehicleNumber || user.vehicleNumber || 'Vehicle Registered'})` : 'No Parking Assigned' },
                   { icon: <Lock size={14} />, label: 'Storage Locker', value: assignedLocker ? `${assignedLocker.label || assignedLocker.lockerNumber} (PIN: ${assignedLocker.pinCode || '****'})` : 'No Locker Assigned' },
                   { icon: <Package size={14} />, label: 'Current Package Tier', value: `${user.passType || activeBooking?.passType || 'Standard'} Pass` },
