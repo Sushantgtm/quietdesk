@@ -1,9 +1,10 @@
 import {
-  collection, onSnapshot, doc, setDoc, updateDoc, getDocs,
+  collection, onSnapshot, doc, setDoc, updateDoc, getDoc, getDocs,
   deleteDoc, runTransaction, serverTimestamp, query, where
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { findOrCreateStudentFirestore } from './userService';
+import { calculateRenewalEndDate } from '../../utils/dateUtils';
 
 // ─── localStorage cache helpers (UI cache ONLY — not authoritative source) ───
 const CACHE_KEY = 'quietdesk_bookings_cache_v6';
@@ -568,25 +569,26 @@ export const settleBookingDueInFirestore = async (bookingId, paymentMethod = 'CA
 };
 
 /**
- * Renews an active or expired booking by extending its expiry date by the pass duration
+ * Renews an active or expired booking by package (DAILY, WEEKLY, MONTHLY)
+ * or explicit custom end date using the shared date utility.
  */
-export const renewStudentBookingInFirestore = async (bookingId, daysToAdd = 30) => {
+export const renewStudentBookingInFirestore = async (bookingId, passType = 'MONTHLY', customEndDate = null) => {
   const now = new Date().toISOString();
   const bookingRef = doc(db, 'bookings', bookingId);
   const snap = await getDoc(bookingRef);
   if (!snap.exists()) throw new Error('Booking record not found.');
   const b = snap.data();
 
-  const todayStr = new Date().toISOString().split('T')[0];
-  const baseDate = (b.endDate && b.endDate >= todayStr) ? new Date(b.endDate) : new Date();
-  baseDate.setDate(baseDate.getDate() + Number(daysToAdd));
-  const newEndDate = baseDate.toISOString().split('T')[0];
+  // Unified shared date calculation
+  const newEndDate = customEndDate || calculateRenewalEndDate(b.endDate, passType);
 
   const updates = {
     endDate: newEndDate,
+    passType: passType || b.passType || 'MONTHLY',
     status: 'CONFIRMED',
     renewedAt: now,
-    updatedAt: now
+    updatedAt: now,
+    notes: `${b.notes || ''} [Renewed: ${passType} Pass until ${newEndDate}]`.trim()
   };
 
   await updateDoc(bookingRef, updates);
@@ -597,6 +599,7 @@ export const renewStudentBookingInFirestore = async (bookingId, daysToAdd = 30) 
       await updateDoc(doc(db, 'users', b.userId), {
         status: 'ACTIVE',
         membershipStatus: 'ACTIVE',
+        passType: passType || b.passType || 'MONTHLY',
         updatedAt: now
       });
     } catch (_) {}
@@ -612,9 +615,24 @@ export const renewStudentBookingInFirestore = async (bookingId, daysToAdd = 30) 
     } catch (_) {}
   }
 
+  // If student has an assigned locker, extend locker validity as well
+  if (b.hasLocker && b.lockerNumber) {
+    try {
+      const lockersSnap = await getDocs(collection(db, 'lockers'));
+      const matchingLocker = lockersSnap.docs.find(d => d.data().lockerNumber === b.lockerNumber);
+      if (matchingLocker) {
+        await updateDoc(doc(db, 'lockers', matchingLocker.id), {
+          endDate: newEndDate,
+          updatedAt: now
+        });
+      }
+    } catch (_) {}
+  }
+
   const cached = getCachedBookings();
   setCachedBookings(cached.map(item => item.id === bookingId ? { ...item, ...updates } : item));
 
   return newEndDate;
 };
+
 

@@ -21,6 +21,7 @@ import { LockerManageModal } from '../components/admin/LockerManageModal';
 import { StudentProfileModal } from '../components/admin/StudentProfileModal';
 import { ReservationConfirmModal } from '../components/admin/ReservationConfirmModal';
 import { exportToExcel } from '../utils/exportExcel';
+import { calculatePackageEndDate } from '../utils/dateUtils';
 
 export const AdminPage = () => {
   const { isAuthenticated, logout, admin } = useAuth();
@@ -87,16 +88,7 @@ export const AdminPage = () => {
 
   const calculateExpectedAdminEndDate = (startStr, passType) => {
     if (!startStr) return '';
-    const parts = startStr.split('-').map(Number);
-    if (parts.length !== 3 || isNaN(parts[0])) return startStr;
-    const date = new Date(parts[0], parts[1] - 1, parts[2]);
-    const pt = (passType || 'DAILY').toUpperCase();
-    if (pt === 'WEEKLY') date.setDate(date.getDate() + 7);
-    else if (pt === 'MONTHLY') date.setDate(date.getDate() + 30);
-    const yr = date.getFullYear();
-    const mo = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${yr}-${mo}-${day}`;
+    return calculatePackageEndDate(startStr, passType);
   };
 
   const [showReservationModal, setShowReservationModal] = useState(false);
@@ -2668,6 +2660,35 @@ export const AdminPage = () => {
                                 <button
                                   type="button"
                                   onClick={() => {
+                                    const u = users.find(usr => 
+                                      usr.id === activeBooking?.userId ||
+                                      (usr.phone && activeBooking?.userPhone && usr.phone.replace(/\D/g, '') === activeBooking.userPhone.replace(/\D/g, ''))
+                                    ) || {
+                                      id: activeBooking?.userId,
+                                      userCode: activeBooking?.userCode,
+                                      fullName: activeBooking?.userName,
+                                      phone: activeBooking?.userPhone,
+                                      email: activeBooking?.userEmail,
+                                      seatId: seat.id,
+                                      seatNumber: seat.seatNumber,
+                                      passType: activeBooking?.passType,
+                                      status: 'ACTIVE'
+                                    };
+                                    setSelectedUserForProfile(u);
+                                  }}
+                                  style={{
+                                    padding: '0.45rem 0.6rem', borderRadius: '6px', border: 'none',
+                                    backgroundColor: '#1E40AF', color: '#FFFFFF', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer',
+                                    display: 'flex', alignItems: 'center', gap: '0.25rem'
+                                  }}
+                                  title="View Assigned Scholar Complete Profile"
+                                >
+                                  <User size={13} /> View Profile
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
                                     const bToPay = activeBooking || {
                                       id: `seat_${seat.id}`,
                                       seatId: seat.id,
@@ -2785,6 +2806,35 @@ export const AdminPage = () => {
                                 <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                                   {(seat.status === 'OCCUPIED' || seat.status === 'RESERVED' || activeBooking) && (
                                     <>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const u = users.find(usr => 
+                                            usr.id === activeBooking?.userId ||
+                                            (usr.phone && activeBooking?.userPhone && usr.phone.replace(/\D/g, '') === activeBooking.userPhone.replace(/\D/g, ''))
+                                          ) || {
+                                            id: activeBooking?.userId,
+                                            userCode: activeBooking?.userCode,
+                                            fullName: activeBooking?.userName,
+                                            phone: activeBooking?.userPhone,
+                                            email: activeBooking?.userEmail,
+                                            seatId: seat.id,
+                                            seatNumber: seat.seatNumber,
+                                            passType: activeBooking?.passType,
+                                            status: 'ACTIVE'
+                                          };
+                                          setSelectedUserForProfile(u);
+                                        }}
+                                        style={{
+                                          padding: '0.3rem 0.55rem', borderRadius: '6px', border: 'none',
+                                          backgroundColor: '#1E40AF', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer',
+                                          display: 'flex', alignItems: 'center', gap: '0.2rem'
+                                        }}
+                                        title="View Assigned Scholar Complete Profile"
+                                      >
+                                        <User size={12} /> Profile
+                                      </button>
+
                                       <button
                                         type="button"
                                         onClick={() => {
@@ -4415,8 +4465,8 @@ export const AdminPage = () => {
           await changeStudentSeat(bookingId, newSeatObj, oldSeatId, studentId);
           alert(`Desk successfully changed to Desk ${newSeatObj.seatNumber}! Previous desk has been released.`);
         }}
-        onRenewBooking={async (bookingId, days) => {
-          const newEnd = await renewStudentBooking(bookingId, days);
+        onRenewBooking={async (bookingId, passType, customEndDate) => {
+          const newEnd = await renewStudentBooking(bookingId, passType, customEndDate);
           alert(`Booking successfully renewed! New expiry date: ${newEnd}`);
         }}
         onSettleDue={async (bookingId, paymentMethod) => {
@@ -5424,9 +5474,9 @@ export const AdminPage = () => {
         onAssignStudent={async (seat, student, mode, bookingDetails = {}) => {
           try {
             const {
-              passType = 'DAILY', shift = 'FULL_DAY', shiftTime = '06:00 AM €šââ‚¬Å“ 09:00 PM',
+              passType = 'DAILY', shift = 'FULL_DAY', shiftTime = '06:00 AM - 09:00 PM',
               startDate = new Date().toISOString().split('T')[0],
-              endDate = new Date().toISOString().split('T')[0],
+              endDate = calculatePackageEndDate(new Date().toISOString().split('T')[0], 'DAILY'),
               hasLocker = false, lockerNumber = '',
               paymentMethod = 'CASH', amountPaid = 0,
               pendingAmount = 0, paymentStatus = 'PAID',
@@ -5451,7 +5501,7 @@ export const AdminPage = () => {
             });
 
             if (dupBooking) {
-              alert(`…‚‚‚ Scholar "${displayName}" already holds an active desk (Desk ${dupBooking.seatNumber}, valid until ${dupBooking.endDate || 'active'}). A student cannot hold multiple active desks simultaneously.`);
+              alert(`⚠️ Scholar "${displayName}" already holds an active desk (Desk ${dupBooking.seatNumber}, valid until ${dupBooking.endDate || 'active'}). A student cannot hold multiple active desks simultaneously.`);
               return;
             }
 
@@ -5579,6 +5629,11 @@ export const AdminPage = () => {
           setPreselectedSeatForRegister(seat);
           setPreselectedBookingForRegister(null);
           setShowRegisterStudentModal(true);
+        }}
+        onViewProfile={(studentUser) => {
+          setShowCabinStudentModal(false);
+          setSelectedSeatForCabinModal(null);
+          setSelectedUserForProfile(studentUser);
         }}
       />
 

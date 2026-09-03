@@ -4,6 +4,7 @@ import {
   Lock, DollarSign, CreditCard, ShieldCheck, AlertCircle, Sparkles
 } from 'lucide-react';
 import { useBooking } from '../../context/BookingContext';
+import { calculatePackageEndDate } from '../../utils/dateUtils';
 
 export const ReservationConfirmModal = ({
   isOpen,
@@ -27,16 +28,7 @@ export const ReservationConfirmModal = ({
 
   const computeExpectedEndDate = (startStr, pt) => {
     if (!startStr) return '';
-    const parts = startStr.split('-').map(Number);
-    if (parts.length !== 3 || isNaN(parts[0])) return startStr;
-    const d = new Date(parts[0], parts[1] - 1, parts[2]);
-    const pass = (pt || 'DAILY').toUpperCase();
-    if (pass === 'WEEKLY') d.setDate(d.getDate() + 7);
-    else if (pass === 'MONTHLY') d.setDate(d.getDate() + 30);
-    const yr = d.getFullYear();
-    const mo = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${yr}-${mo}-${day}`;
+    return calculatePackageEndDate(startStr, pt);
   };
 
   useEffect(() => {

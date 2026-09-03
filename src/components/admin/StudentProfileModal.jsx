@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from 'react';
 import {
   X, User, Phone, Mail, MapPin, Shield, Clock, Bookmark,
   Lock, CreditCard, CheckCircle2, AlertCircle, Edit3,
   Calendar, DollarSign, ChevronRight, Repeat, FileText,
   ArrowDownCircle, Banknote, TrendingUp, Package, Key,
-  Trash2, UserMinus, RefreshCw, Printer, AlertTriangle, Car
+  Trash2, UserMinus, RefreshCw, Printer, AlertTriangle, Car, Sparkles
 } from 'lucide-react';
+import { calculateRenewalEndDate, calculateDaysRemaining, calculatePackageEndDate } from '../../utils/dateUtils';
 
 const TABS = ['profile', 'status', 'financials', 'history'];
 const TAB_LABELS = {
@@ -49,6 +49,8 @@ export const StudentProfileModal = ({
   const [activeTab, setActiveTab] = useState('profile');
   const [isChangingCabin, setIsChangingCabin] = useState(false);
   const [selectedNewSeatId, setSelectedNewSeatId] = useState('');
+  const [isRenewingPackage, setIsRenewingPackage] = useState(false);
+  const [selectedRenewalPackage, setSelectedRenewalPackage] = useState('MONTHLY');
   const [isProcessingAction, setIsProcessingAction] = useState(false);
 
   // Filter bookings for this student
@@ -106,22 +108,16 @@ export const StudentProfileModal = ({
   const initials = displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || 'S';
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // Days remaining calculation
-  const getDaysRemaining = (endDateStr) => {
-    if (!endDateStr) return null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const exp = new Date(endDateStr);
-    exp.setHours(0, 0, 0, 0);
-    const diffTime = exp - today;
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  };
-
-  const daysRemaining = activeBooking?.endDate ? getDaysRemaining(activeBooking.endDate) : null;
+  const daysRemaining = activeBooking?.endDate ? calculateDaysRemaining(activeBooking.endDate) : null;
 
   const isDiscontinued = user.status === 'DISCONTINUED' || user.membershipStatus === 'DISCONTINUED';
   const hasLiveBooking = userBookings.some(b => !['CANCELLED', 'COMPLETED', 'REJECTED'].includes(b.status) && (!b.endDate || b.endDate >= todayStr));
   const userStatus = isDiscontinued ? 'DISCONTINUED' : (hasLiveBooking ? 'ACTIVE' : (user.membershipStatus || user.status || 'INACTIVE'));
+
+  // Calculated preview of new expiry date based on selected package
+  const renewalExpiryPreview = useMemo(() => {
+    return calculateRenewalEndDate(activeBooking?.endDate, selectedRenewalPackage);
+  }, [activeBooking?.endDate, selectedRenewalPackage]);
 
   // Handler: Change Cabin
   const handleConfirmChangeCabin = async () => {
@@ -153,18 +149,15 @@ export const StudentProfileModal = ({
     }
   };
 
-  // Handler: Renew Booking
-  const handleRenew = async () => {
+  // Handler: Renew Booking by selecting package
+  const handleConfirmRenew = async () => {
     if (!activeBooking) return;
-    const defaultDays = activeBooking.passType === 'MONTHLY' ? 30 : activeBooking.passType === 'WEEKLY' ? 7 : 1;
-    const input = window.prompt(`Renew pass for ${displayName}?\n\nEnter number of days to extend:`, String(defaultDays));
-    if (!input || isNaN(Number(input)) || Number(input) <= 0) return;
-
     setIsProcessingAction(true);
     try {
       if (onRenewBooking) {
-        await onRenewBooking(activeBooking.id, Number(input));
+        await onRenewBooking(activeBooking.id, selectedRenewalPackage, renewalExpiryPreview);
       }
+      setIsRenewingPackage(false);
     } catch (err) {
       alert('Error renewing pass: ' + err.message);
     } finally {
@@ -442,7 +435,10 @@ export const StudentProfileModal = ({
                   {activeBooking && (
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <button
-                        onClick={() => setIsChangingCabin(!isChangingCabin)}
+                        onClick={() => {
+                          setIsChangingCabin(!isChangingCabin);
+                          setIsRenewingPackage(false);
+                        }}
                         style={{
                           backgroundColor: isChangingCabin ? '#64748B' : '#0284C7',
                           color: '#FFFFFF',
@@ -460,10 +456,13 @@ export const StudentProfileModal = ({
                         <RefreshCw size={13} /> {isChangingCabin ? 'Cancel Change' : 'Change Cabin'}
                       </button>
                       <button
-                        onClick={handleRenew}
+                        onClick={() => {
+                          setIsRenewingPackage(!isRenewingPackage);
+                          setIsChangingCabin(false);
+                        }}
                         disabled={isProcessingAction}
                         style={{
-                          backgroundColor: '#059669',
+                          backgroundColor: isRenewingPackage ? '#64748B' : '#059669',
                           color: '#FFFFFF',
                           border: 'none',
                           padding: '0.4rem 0.85rem',
@@ -476,7 +475,7 @@ export const StudentProfileModal = ({
                           gap: '0.35rem'
                         }}
                       >
-                        <Repeat size={13} /> Renew Pass
+                        <Repeat size={13} /> {isRenewingPackage ? 'Cancel Renewal' : 'Renew / Extend Package'}
                       </button>
                     </div>
                   )}
@@ -507,6 +506,90 @@ export const StudentProfileModal = ({
                       <div><span style={{ color: '#64748B' }}>Timing Shift:</span> <strong style={{ display: 'block', marginTop: '2px' }}>{activeBooking.shift || activeBooking.bookingTime || 'Full Day Access'}</strong></div>
                       <div><span style={{ color: '#64748B' }}>Booking Code:</span> <strong style={{ display: 'block', marginTop: '2px', fontFamily: 'monospace' }}>{activeBooking.bookingCode}</strong></div>
                     </div>
+
+                    {/* Package-Based Renewal Form (Requirement 2) */}
+                    {isRenewingPackage && (
+                      <div style={{ marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1.5px solid #A7F3D0', backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0F172A', marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <Sparkles size={16} style={{ color: '#059669' }} /> Select Renewal Package for {displayName}
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: '#64748B', marginBottom: '1rem' }}>
+                          Choose the renewal package. The new expiry date is calculated automatically using the shared package duration utility.
+                        </div>
+
+                        {/* Package Selection Cards */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginBottom: '1rem' }}>
+                          {[
+                            { id: 'DAILY', label: 'Daily Pass', duration: '1 Day (+1 day)', icon: '⚡' },
+                            { id: 'WEEKLY', label: 'Weekly Pass', duration: '7 Days (+7 days)', icon: '📅' },
+                            { id: 'MONTHLY', label: 'Monthly Pass', duration: '30 Days (+30 days)', icon: '🏆' }
+                          ].map(pkg => {
+                            const isSelected = selectedRenewalPackage === pkg.id;
+                            return (
+                              <div
+                                key={pkg.id}
+                                onClick={() => setSelectedRenewalPackage(pkg.id)}
+                                style={{
+                                  padding: '0.85rem 1rem',
+                                  borderRadius: '10px',
+                                  border: `2px solid ${isSelected ? '#059669' : '#CBD5E1'}`,
+                                  backgroundColor: isSelected ? '#ECFDF5' : '#F8FAFC',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease',
+                                  textAlign: 'center'
+                                }}
+                              >
+                                <div style={{ fontSize: '1.2rem', marginBottom: '0.2rem' }}>{pkg.icon}</div>
+                                <div style={{ fontWeight: 800, fontSize: '0.85rem', color: isSelected ? '#065F46' : '#0F172A' }}>{pkg.label}</div>
+                                <div style={{ fontSize: '0.72rem', color: isSelected ? '#047857' : '#64748B', fontWeight: 600, marginTop: '2px' }}>{pkg.duration}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Expiry Date Preview Calculation Banner */}
+                        <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px', padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+                          <div>
+                            <span style={{ fontSize: '0.75rem', color: '#166534', fontWeight: 600 }}>Current Expiry: <strong>{activeBooking.endDate || todayStr}</strong></span>
+                            <span style={{ margin: '0 0.5rem', color: '#86EFAC' }}>➔</span>
+                            <span style={{ fontSize: '0.85rem', color: '#065F46', fontWeight: 800 }}>New Expiry: <strong>{renewalExpiryPreview}</strong></span>
+                          </div>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#047857', backgroundColor: '#DCFCE7', padding: '3px 8px', borderRadius: '6px' }}>
+                            {selectedRenewalPackage} PASS
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => setIsRenewingPackage(false)}
+                            style={{ padding: '0.55rem 1rem', backgroundColor: '#F1F5F9', border: 'none', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 700, color: '#475569', cursor: 'pointer' }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleConfirmRenew}
+                            disabled={isProcessingAction}
+                            style={{
+                              padding: '0.55rem 1.35rem',
+                              backgroundColor: '#059669',
+                              border: 'none',
+                              borderRadius: '8px',
+                              fontSize: '0.82rem',
+                              fontWeight: 800,
+                              color: '#FFFFFF',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.4rem'
+                            }}
+                          >
+                            <Repeat size={14} /> {isProcessingAction ? 'Renewing...' : `Confirm Renewal until ${renewalExpiryPreview}`}
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Change Cabin Inline Form */}
                     {isChangingCabin && (

@@ -5,6 +5,7 @@ import { Footer } from '../components/layout/Footer';
 import { useBooking } from '../context/BookingContext';
 import { ACCESS_PLANS } from '../services/mock/mockData';
 import { CheckCircle2, User, Mail, Phone, Calendar, ArrowRight, ArrowLeft, ShieldCheck, Ticket, Sparkles, Lock, Clock, Camera } from 'lucide-react';
+import { calculatePackageEndDate } from '../utils/dateUtils';
 
 export const BookingPage = () => {
   const [searchParams] = useSearchParams();
@@ -25,24 +26,10 @@ export const BookingPage = () => {
 
   const todayLocalDate = getTodayLocalDateStr();
 
-  // Helper to calculate expected expiry date based on start date and pass tier (timezone safe)
+  // Helper to calculate expected expiry date based on start date and pass tier (unified dateUtils)
   const calculateExpectedEndDate = (startStr, passType) => {
     if (!startStr) return '';
-    const parts = startStr.split('-').map(Number);
-    if (parts.length !== 3 || isNaN(parts[0])) return startStr;
-    const date = new Date(parts[0], parts[1] - 1, parts[2]);
-    const pt = (passType || '').toUpperCase();
-    if (pt === 'DAILY' || pt === 'DAY') {
-      return startStr;
-    } else if (pt === 'WEEKLY' || pt === 'WEEK') {
-      date.setDate(date.getDate() + 7);
-    } else if (pt === 'MONTHLY' || pt === 'MONTH') {
-      date.setDate(date.getDate() + 30);
-    }
-    const yr = date.getFullYear();
-    const mo = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${yr}-${mo}-${day}`;
+    return calculatePackageEndDate(startStr, passType);
   };
 
   // Helper to compute next 15-minute slot for current local time

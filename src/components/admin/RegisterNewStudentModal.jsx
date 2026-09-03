@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useBooking } from '../../context/BookingContext';
 import { sendReservationConfirmationEmail } from '../../services/emailService';
+import { calculatePackageEndDate } from '../../utils/dateUtils';
 
 export const RegisterNewStudentModal = ({
   isOpen,
@@ -62,25 +63,10 @@ export const RegisterNewStudentModal = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [emailStatusMsg, setEmailStatusMsg] = useState('');
 
-  // Calculate End Date helper
+  // Calculate End Date helper (unified dateUtils)
   const calculateEndDate = (startStr, passType) => {
     if (!startStr) return '';
-    const parts = startStr.split('-').map(Number);
-    if (parts.length !== 3 || isNaN(parts[0])) return startStr;
-    const date = new Date(parts[0], parts[1] - 1, parts[2]);
-
-    const pt = (passType || 'DAILY').toUpperCase();
-    if (pt === 'DAILY') {
-      return startStr;
-    } else if (pt === 'WEEKLY') {
-      date.setDate(date.getDate() + 7);
-    } else if (pt === 'MONTHLY') {
-      date.setDate(date.getDate() + 30);
-    }
-    const yr = date.getFullYear();
-    const mo = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${yr}-${mo}-${day}`;
+    return calculatePackageEndDate(startStr, passType);
   };
 
   // Pricing helper

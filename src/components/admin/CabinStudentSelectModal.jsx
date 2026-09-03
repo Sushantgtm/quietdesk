@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
   X, Search, UserCheck, CheckCircle2, UserPlus, Phone, Calendar,
-  Clock, MapPin, AlertCircle, Lock, Key, DollarSign
+  Clock, MapPin, AlertCircle, Lock, Key, DollarSign, User
 } from 'lucide-react';
 import { useBooking } from '../../context/BookingContext';
+import { calculatePackageEndDate } from '../../utils/dateUtils';
 
 export const CabinStudentSelectModal = ({
   isOpen,
@@ -11,7 +12,8 @@ export const CabinStudentSelectModal = ({
   cabinSeat,
   onAssignStudent,
   onReleaseCabin,
-  onOpenWalkinForCabin
+  onOpenWalkinForCabin,
+  onViewProfile
 }) => {
   const bookingCtx = useBooking() || {};
   const { users = [], bookings = [], seats = [], lockers = [], updateBookingDetails, assignLocker } = bookingCtx;
@@ -37,18 +39,10 @@ export const CabinStudentSelectModal = ({
   const [customExtendEndDate, setCustomExtendEndDate] = useState('');
   const [extensionSuccessMsg, setExtensionSuccessMsg] = useState('');
 
-  // ── Auto-compute default end date based on pass type (timezone-safe) ──
+  // ── Auto-compute default end date based on pass type (unified dateUtils) ──
   const computeEndDate = (start, pt) => {
     if (!start) return today;
-    const parts = start.split('-').map(Number);
-    if (parts.length !== 3 || isNaN(parts[0])) return start;
-    const d = new Date(parts[0], parts[1] - 1, parts[2]);
-    if (pt === 'WEEKLY') d.setDate(d.getDate() + 7);
-    else if (pt === 'MONTHLY') d.setDate(d.getDate() + 30);
-    const yr = d.getFullYear();
-    const mo = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${yr}-${mo}-${day}`;
+    return calculatePackageEndDate(start, pt);
   };
 
   // Reset form whenever a new seat is opened
@@ -508,103 +502,65 @@ export const CabinStudentSelectModal = ({
                 )}
               </div>
 
-              {/* ── EXTEND RESERVATION CONTROLS (Before 7 Days of Expiry or Admin Override) ── */}
+              {/* ── VIEW STUDENT COMPLETE PROFILE ── */}
               <div style={{
                 backgroundColor: '#EFF6FF',
-                border: '1px solid #BFDBFE',
+                border: '1.5px solid #BFDBFE',
                 borderRadius: '12px',
-                padding: '1.1rem'
+                padding: '1.1rem',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '0.75rem'
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#1E40AF', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <Calendar size={16} /> Extend Reservation for {currentOccupantBooking?.userName?.split(' ')[0] || 'Scholar'}
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: '#3B82F6' }}>
-                      {daysRemaining <= 7 ? '⭐ Eligible for early extension (within 7 days of expiry)' : `Current expiry date is ${endDateStr}`}
-                    </div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#1E40AF', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <User size={18} /> Student Profile & Access Management
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setExtensionMode(!extensionMode)}
-                    style={{
-                      padding: '0.4rem 0.85rem',
-                      borderRadius: '6px',
-                      backgroundColor: '#2563EB',
-                      color: '#FFF',
-                      border: 'none',
-                      fontWeight: 700,
-                      fontSize: '0.78rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {extensionMode ? 'Cancel' : '📅 Extend Expiry'}
-                  </button>
+                  <div style={{ fontSize: '0.75rem', color: '#3B82F6', marginTop: '0.2rem' }}>
+                    View complete student details, dues, package renewal, cabin change, and financial history.
+                  </div>
                 </div>
-
-                {extensionMode && (
-                  <div style={{
-                    backgroundColor: '#FFFFFF',
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onViewProfile) {
+                      const studentUser = users.find(u =>
+                        u.id === currentOccupantBooking?.userId ||
+                        (u.phone && currentOccupantBooking?.userPhone && u.phone.replace(/\D/g, '') === currentOccupantBooking.userPhone.replace(/\D/g, ''))
+                      ) || {
+                        id: currentOccupantBooking?.userId,
+                        userCode: currentOccupantBooking?.userCode,
+                        fullName: currentOccupantBooking?.userName,
+                        phone: currentOccupantBooking?.userPhone,
+                        email: currentOccupantBooking?.userEmail,
+                        address: currentOccupantBooking?.userAddress,
+                        seatId: currentOccupantBooking?.seatId,
+                        seatNumber: currentOccupantBooking?.seatNumber,
+                        passType: currentOccupantBooking?.passType,
+                        status: 'ACTIVE'
+                      };
+                      onViewProfile(studentUser);
+                    }
+                  }}
+                  style={{
+                    padding: '0.55rem 1.15rem',
                     borderRadius: '8px',
-                    padding: '0.85rem',
-                    border: '1px solid #93C5FD',
-                    marginTop: '0.5rem',
+                    backgroundColor: '#1E40AF',
+                    color: '#FFF',
+                    border: 'none',
+                    fontWeight: 800,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
                     display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.6rem'
-                  }}>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#1E293B' }}>Choose Extension Duration:</div>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleExtendBooking(7)}
-                        disabled={isProcessing}
-                        style={{
-                          padding: '0.45rem 0.9rem', backgroundColor: '#EFF6FF',
-                          border: '1.5px solid #2563EB', borderRadius: '6px',
-                          color: '#1E40AF', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer'
-                        }}
-                      >
-                        + 7 Days (1 Week)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleExtendBooking(30)}
-                        disabled={isProcessing}
-                        style={{
-                          padding: '0.45rem 0.9rem', backgroundColor: '#EFF6FF',
-                          border: '1.5px solid #2563EB', borderRadius: '6px',
-                          color: '#1E40AF', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer'
-                        }}
-                      >
-                        + 30 Days (1 Month)
-                      </button>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.4rem', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>Or pick custom expiry date:</span>
-                      <input
-                        type="date"
-                        min={endDateStr}
-                        value={customExtendEndDate}
-                        onChange={e => setCustomExtendEndDate(e.target.value)}
-                        style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem' }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleExtendBooking('CUSTOM')}
-                        disabled={isProcessing || !customExtendEndDate}
-                        style={{
-                          padding: '0.38rem 0.75rem', backgroundColor: '#16A34A',
-                          color: '#FFF', border: 'none', borderRadius: '6px',
-                          fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer'
-                        }}
-                      >
-                        Confirm Date
-                      </button>
-                    </div>
-                  </div>
-                )}
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    boxShadow: '0 2px 4px rgba(30, 64, 175, 0.2)'
+                  }}
+                >
+                  <User size={15} /> View Profile
+                </button>
               </div>
 
               {/* ── ADVANCE BOOKING FOR NEXT PERSON AFTER EXPIRY ── */}
@@ -656,9 +612,46 @@ export const CabinStudentSelectModal = ({
               </div>
 
               {/* Footer Actions */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #E2E8F0', paddingTop: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #E2E8F0', paddingTop: '1rem', flexWrap: 'wrap' }}>
                 <button onClick={onClose} style={{ padding: '0.6rem 1.25rem', backgroundColor: '#F1F5F9', border: 'none', borderRadius: '8px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}>
                   Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onViewProfile) {
+                      const studentUser = users.find(u =>
+                        u.id === currentOccupantBooking?.userId ||
+                        (u.phone && currentOccupantBooking?.userPhone && u.phone.replace(/\D/g, '') === currentOccupantBooking.userPhone.replace(/\D/g, ''))
+                      ) || {
+                        id: currentOccupantBooking?.userId,
+                        userCode: currentOccupantBooking?.userCode,
+                        fullName: currentOccupantBooking?.userName,
+                        phone: currentOccupantBooking?.userPhone,
+                        email: currentOccupantBooking?.userEmail,
+                        address: currentOccupantBooking?.userAddress,
+                        seatId: currentOccupantBooking?.seatId,
+                        seatNumber: currentOccupantBooking?.seatNumber,
+                        passType: currentOccupantBooking?.passType,
+                        status: 'ACTIVE'
+                      };
+                      onViewProfile(studentUser);
+                    }
+                  }}
+                  style={{
+                    padding: '0.6rem 1.35rem',
+                    backgroundColor: '#1E40AF',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: 800,
+                    color: '#FFF',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem'
+                  }}
+                >
+                  <User size={15} /> View Profile
                 </button>
                 <button
                   disabled={isProcessing}
