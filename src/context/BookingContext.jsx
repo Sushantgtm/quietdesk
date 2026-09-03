@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { subscribeSeatAvailability, updateSeatStatusInFirestore, updateSeatDetailsInFirestore, createSeatInFirestore, deleteSeatInFirestore, reconcileSeatAvailabilityInFirestore } from '../services/firebase/seatService';
-import { subscribeBookings, createBooking as createBookingService, updateBookingStatus, confirmBooking as confirmBookingService, updateBookingPaymentStatus, updateBookingDetails as updateBookingDetailsService, approveBooking as approveBookingService, rejectBooking as rejectBookingService, createAdminBooking as createAdminBookingService } from '../services/firebase/bookingService';
+import { subscribeBookings, createBooking as createBookingService, updateBookingStatus, confirmBooking as confirmBookingService, updateBookingPaymentStatus, updateBookingDetails as updateBookingDetailsService, approveBooking as approveBookingService, rejectBooking as rejectBookingService, createAdminBooking as createAdminBookingService, changeStudentSeatInFirestore, settleBookingDueInFirestore, renewStudentBookingInFirestore } from '../services/firebase/bookingService';
 import { subscribePlans, createPlan as createPlanService, updatePlan as updatePlanService, deletePlan as deletePlanService } from '../services/firebase/pricingService';
-import { subscribeUsers, createUser as createUserService, updateUser as updateUserService, findOrCreateStudent as findOrCreateStudentService } from '../services/firebase/userService';
+import { subscribeUsers, createUser as createUserService, updateUser as updateUserService, findOrCreateStudent as findOrCreateStudentService, deactivateStudentInFirestore } from '../services/firebase/userService';
 import { subscribeAmenities, createAmenityInFirestore, updateAmenityInFirestore, deleteAmenityFromFirestore } from '../services/firebase/amenityService';
 import { subscribeBranchInfo } from '../services/firebase/branchService';
 import { subscribeZones, createZoneInFirestore, updateZoneInFirestore, deleteZoneInFirestore, resetAndSeedZonesInFirestore, INITIAL_ZONES } from '../services/firebase/zoneService';
@@ -361,6 +361,10 @@ export const BookingProvider = ({ children }) => {
         updateFaq,
         deleteFaq,
         reconcileSeats: reconcileSeatAvailabilityInFirestore,
+        deactivateStudent: deactivateStudentInFirestore,
+        changeStudentSeat: changeStudentSeatInFirestore,
+        settleBookingDue: settleBookingDueInFirestore,
+        renewStudentBooking: renewStudentBookingInFirestore,
       }}
     >
       {children}

@@ -476,3 +476,145 @@ export const purgeAllBookingsFromFirestore = async () => {
 
   return snapshot.docs.length;
 };
+
+/**
+ * Changes a student's assigned cabin/seat atomically in Firestore:
+ * - Checks new seat is AVAILABLE
+ * - Sets new seat to OCCUPIED
+ * - Releases old seat to AVAILABLE only after new seat assignment succeeds
+ * - Updates booking and user documents
+ */
+export const changeStudentSeatInFirestore = async (bookingId, newSeatObj, oldSeatId, studentId) => {
+  const now = new Date().toISOString();
+
+  await runTransaction(db, async (tx) => {
+    const newSeatRef = doc(db, 'seats', newSeatObj.id);
+    const newSeatSnap = await tx.get(newSeatRef);
+    if (!newSeatSnap.exists()) throw new Error(`Seat ${newSeatObj.seatNumber} not found.`);
+    const newSeatData = newSeatSnap.data();
+    if (newSeatData.status !== 'AVAILABLE') {
+      throw new Error(`Seat ${newSeatObj.seatNumber} is not available (currently ${newSeatData.status}).`);
+    }
+
+    const bookingRef = doc(db, 'bookings', bookingId);
+    tx.update(bookingRef, {
+      seatId: newSeatObj.id,
+      seatNumber: newSeatObj.seatNumber,
+      updatedAt: now
+    });
+
+    tx.update(newSeatRef, {
+      status: 'OCCUPIED',
+      updatedAt: now
+    });
+
+    if (oldSeatId && oldSeatId !== newSeatObj.id) {
+      const oldSeatRef = doc(db, 'seats', oldSeatId);
+      tx.update(oldSeatRef, {
+        status: 'AVAILABLE',
+        updatedAt: now
+      });
+    }
+
+    if (studentId) {
+      const userRef = doc(db, 'users', studentId);
+      tx.update(userRef, {
+        seatId: newSeatObj.id,
+        seatNumber: newSeatObj.seatNumber,
+        assignedSeat: `Desk ${newSeatObj.seatNumber}`,
+        updatedAt: now
+      });
+    }
+  });
+
+  // Update local cache
+  const cached = getCachedBookings();
+  setCachedBookings(cached.map(b => b.id === bookingId ? {
+    ...b,
+    seatId: newSeatObj.id,
+    seatNumber: newSeatObj.seatNumber,
+    updatedAt: now
+  } : b));
+
+  return true;
+};
+
+/**
+ * Clears/settles all outstanding due on a booking in Firestore
+ */
+export const settleBookingDueInFirestore = async (bookingId, paymentMethod = 'CASH') => {
+  const now = new Date().toISOString();
+  const bookingRef = doc(db, 'bookings', bookingId);
+  const snap = await getDoc(bookingRef);
+  if (!snap.exists()) throw new Error('Booking record not found.');
+  const b = snap.data();
+  const total = Number(b.totalAmount) || 0;
+
+  const updates = {
+    amountPaid: total,
+    pendingAmount: 0,
+    paymentStatus: 'PAID',
+    paymentMethod: paymentMethod || b.paymentMethod || 'CASH',
+    lastPaymentDate: now,
+    updatedAt: now
+  };
+
+  await updateDoc(bookingRef, updates);
+
+  const cached = getCachedBookings();
+  setCachedBookings(cached.map(item => item.id === bookingId ? { ...item, ...updates } : item));
+
+  return true;
+};
+
+/**
+ * Renews an active or expired booking by extending its expiry date by the pass duration
+ */
+export const renewStudentBookingInFirestore = async (bookingId, daysToAdd = 30) => {
+  const now = new Date().toISOString();
+  const bookingRef = doc(db, 'bookings', bookingId);
+  const snap = await getDoc(bookingRef);
+  if (!snap.exists()) throw new Error('Booking record not found.');
+  const b = snap.data();
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const baseDate = (b.endDate && b.endDate >= todayStr) ? new Date(b.endDate) : new Date();
+  baseDate.setDate(baseDate.getDate() + Number(daysToAdd));
+  const newEndDate = baseDate.toISOString().split('T')[0];
+
+  const updates = {
+    endDate: newEndDate,
+    status: 'CONFIRMED',
+    renewedAt: now,
+    updatedAt: now
+  };
+
+  await updateDoc(bookingRef, updates);
+
+  // If student was inactive, re-activate in users collection
+  if (b.userId) {
+    try {
+      await updateDoc(doc(db, 'users', b.userId), {
+        status: 'ACTIVE',
+        membershipStatus: 'ACTIVE',
+        updatedAt: now
+      });
+    } catch (_) {}
+  }
+
+  // Ensure seat stays OCCUPIED
+  if (b.seatId) {
+    try {
+      await updateDoc(doc(db, 'seats', b.seatId), {
+        status: 'OCCUPIED',
+        updatedAt: now
+      });
+    } catch (_) {}
+  }
+
+  const cached = getCachedBookings();
+  setCachedBookings(cached.map(item => item.id === bookingId ? { ...item, ...updates } : item));
+
+  return newEndDate;
+};
+

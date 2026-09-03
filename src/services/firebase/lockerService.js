@@ -116,6 +116,40 @@ export const updateLockerStatusInFirestore = async (lockerId, newStatus, details
 };
 
 export const assignLockerInFirestore = async (lockerId, { userId, userName, userPhone, userEmail, seatNumber, passType, pinCode, notes, startDate, endDate }) => {
+  // 1. Enforce max 1 active locker rule: if student already has another locker, release it first
+  const normalizedPhone = userPhone ? userPhone.replace(/\D/g, '') : '';
+  const localLockers = getLocalLockers();
+  
+  for (const l of localLockers) {
+    if (l.id !== lockerId && l.status === 'ASSIGNED') {
+      const matchId = userId && l.assignedToUserId === userId;
+      const matchPhone = normalizedPhone && l.assignedToUserPhone && l.assignedToUserPhone.replace(/\D/g, '') === normalizedPhone;
+      if (matchId || matchPhone) {
+        console.log(`Auto-releasing previous locker ${l.id} (${l.lockerNumber}) for student ${userName}`);
+        await releaseLockerInFirestore(l.id);
+      }
+    }
+  }
+
+  // Also query Firestore directly to ensure no orphaned locks exist in DB
+  try {
+    const snap = await getDocs(collection(db, 'lockers'));
+    for (const d of snap.docs) {
+      if (d.id !== lockerId) {
+        const data = d.data();
+        if (data.status === 'ASSIGNED') {
+          const matchId = userId && data.assignedToUserId === userId;
+          const matchPhone = normalizedPhone && data.assignedToUserPhone && data.assignedToUserPhone.replace(/\D/g, '') === normalizedPhone;
+          if (matchId || matchPhone) {
+            await releaseLockerInFirestore(d.id);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Locker pre-cleanup check warning:', err.message);
+  }
+
   const generatedPin = pinCode || `${Math.floor(1000 + Math.random() * 9000)}`;
   const updatedData = {
     status: 'ASSIGNED',
@@ -133,10 +167,10 @@ export const assignLockerInFirestore = async (lockerId, { userId, userName, user
   };
 
   // Update local state immediately
-  const localLockers = getLocalLockers().map(l => 
+  const updatedLocal = getLocalLockers().map(l => 
     l.id === lockerId ? { ...l, ...updatedData } : l
   );
-  saveLocalLockers(localLockers);
+  saveLocalLockers(updatedLocal);
 
   // Write to Firestore — use setDoc merge to handle both existing and missing docs
   try {

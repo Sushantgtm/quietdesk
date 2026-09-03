@@ -228,6 +228,105 @@ export const deleteUser = async (userId) => {
   return true;
 };
 
+/**
+ * Deactivates/discontinues a student without deleting their main profile or financial history.
+ * Frees their seat and locker, marks status as DISCONTINUED.
+ */
+export const deactivateStudentInFirestore = async (userId) => {
+  if (!userId) return false;
+  const now = new Date().toISOString();
+
+  try {
+    // 1. Mark student record as DISCONTINUED
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+      status: 'DISCONTINUED',
+      membershipStatus: 'DISCONTINUED',
+      isDiscontinued: true,
+      discontinuedAt: now,
+      updatedAt: now,
+      assignedSeat: 'None',
+      seatNumber: null,
+      seatId: null
+    }).catch(async () => {
+      // If doc does not exist with that ID, find by field
+      const snap = await getDocs(collection(db, 'users'));
+      const found = snap.docs.find(d => d.id === userId || d.data().id === userId);
+      if (found) {
+        await updateDoc(found.ref, {
+          status: 'DISCONTINUED',
+          membershipStatus: 'DISCONTINUED',
+          isDiscontinued: true,
+          discontinuedAt: now,
+          updatedAt: now,
+          assignedSeat: 'None',
+          seatNumber: null,
+          seatId: null
+        });
+      }
+    });
+
+    // 2. Release all active bookings & seats
+    const bookingsSnap = await getDocs(collection(db, 'bookings'));
+    for (const bDoc of bookingsSnap.docs) {
+      const b = bDoc.data();
+      if (b.userId === userId && !['CANCELLED', 'COMPLETED', 'REJECTED'].includes(b.status)) {
+        await updateDoc(doc(db, 'bookings', bDoc.id), {
+          status: 'COMPLETED',
+          notes: (b.notes ? b.notes + ' | ' : '') + 'Student discontinued',
+          updatedAt: now
+        }).catch(() => {});
+
+        if (b.seatId) {
+          await updateDoc(doc(db, 'seats', b.seatId), {
+            status: 'AVAILABLE',
+            updatedAt: now
+          }).catch(() => {});
+        }
+      }
+    }
+
+    // 3. Release lockers
+    const lockersSnap = await getDocs(collection(db, 'lockers'));
+    for (const lDoc of lockersSnap.docs) {
+      const l = lDoc.data();
+      if (l.assignedToUserId === userId || l.currentStudent === userId) {
+        await updateDoc(doc(db, 'lockers', lDoc.id), {
+          status: 'AVAILABLE',
+          assignedToUserId: null,
+          assignedToUserName: null,
+          assignedToUserPhone: null,
+          assignedToUserEmail: null,
+          assignedSeatNumber: null,
+          passType: null,
+          pinCode: null,
+          updatedAt: now
+        }).catch(() => {});
+      }
+    }
+
+    const currentLocal = getLocalUsers().map(u => 
+      u.id === userId ? {
+        ...u,
+        status: 'DISCONTINUED',
+        membershipStatus: 'DISCONTINUED',
+        isDiscontinued: true,
+        discontinuedAt: now,
+        updatedAt: now,
+        assignedSeat: 'None',
+        seatNumber: null,
+        seatId: null
+      } : u
+    );
+    saveLocalUsers(currentLocal);
+    return true;
+  } catch (err) {
+    console.error('Error deactivating student in Firestore:', err);
+    throw err;
+  }
+};
+
+
 export const purgeAllUsersFromFirestore = async () => {
   const snapshot = await getDocs(collection(db, 'users'));
   const deletes = snapshot.docs.map(d => deleteDoc(doc(db, 'users', d.id)));

@@ -10,7 +10,7 @@ export const LockerManageModal = ({
   onReleaseLocker,
   onUpdateStatus
 }) => {
-  const { users, seats } = useBooking();
+  const { users, seats, lockers } = useBooking();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [selectedSeatNumber, setSelectedSeatNumber] = useState('');
@@ -24,6 +24,14 @@ export const LockerManageModal = ({
 
   const isAssigned = locker.status === 'ASSIGNED';
   const isMaintenance = locker.status === 'MAINTENANCE';
+
+  // Check if selected student already has an active locker (Max 1 locker rule)
+  const studentExistingLocker = selectedStudent ? (lockers || []).find(l => 
+    l.id !== locker.id && 
+    l.status === 'ASSIGNED' && 
+    ((l.assignedToUserId && l.assignedToUserId === selectedStudent.id) ||
+     (l.assignedToUserPhone && selectedStudent.phone && l.assignedToUserPhone.replace(/\D/g, '') === selectedStudent.phone.replace(/\D/g, '')))
+  ) : null;
 
   // Filter students for assignment
   const filteredStudents = users.filter(u => {
@@ -39,6 +47,13 @@ export const LockerManageModal = ({
     if (!selectedStudent) {
       alert('Please select a student to assign this locker.');
       return;
+    }
+
+    if (studentExistingLocker) {
+      const confirmChange = window.confirm(
+        `Notice: ${selectedStudent.fullName || selectedStudent.name} is currently assigned ${studentExistingLocker.label || studentExistingLocker.lockerNumber}.\n\nUnder the 1-locker-per-student rule, assigning this locker will automatically release their previous locker first.\n\nDo you want to proceed?`
+      );
+      if (!confirmChange) return;
     }
 
     setIsProcessing(true);
@@ -332,6 +347,19 @@ export const LockerManageModal = ({
                           </div>
                           <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
                             {student.phone} • {student.userCode || student.passType || 'Standard'}
+                            {(() => {
+                              const existing = (lockers || []).find(l => 
+                                l.id !== locker.id && 
+                                l.status === 'ASSIGNED' && 
+                                ((l.assignedToUserId && l.assignedToUserId === student.id) ||
+                                 (l.assignedToUserPhone && student.phone && l.assignedToUserPhone.replace(/\D/g, '') === student.phone.replace(/\D/g, '')))
+                              );
+                              return existing ? (
+                                <span style={{ marginLeft: '6px', color: '#D97706', fontWeight: 700, backgroundColor: '#FEF3C7', padding: '1px 5px', borderRadius: '4px', fontSize: '0.7rem' }}>
+                                  Holds {existing.label || existing.lockerNumber} (Will Release)
+                                </span>
+                              ) : null;
+                            })()}
                           </div>
                         </div>
 
@@ -345,7 +373,7 @@ export const LockerManageModal = ({
                   })
                 ) : (
                   <div style={{ padding: '1rem', textAlign: 'center', color: '#94A3B8', fontSize: '0.82rem' }}>
-                    No matching students found. Register student first via Walk-in modal.
+                    No matching students found. Register student first via Register Student button.
                   </div>
                 )}
               </div>
