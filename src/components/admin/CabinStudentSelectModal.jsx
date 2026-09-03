@@ -37,14 +37,18 @@ export const CabinStudentSelectModal = ({
   const [customExtendEndDate, setCustomExtendEndDate] = useState('');
   const [extensionSuccessMsg, setExtensionSuccessMsg] = useState('');
 
-  // ── Auto-compute default end date based on pass type ──
+  // ── Auto-compute default end date based on pass type (timezone-safe) ──
   const computeEndDate = (start, pt) => {
     if (!start) return today;
-    const d = new Date(start);
-    if (isNaN(d.getTime())) return start;
+    const parts = start.split('-').map(Number);
+    if (parts.length !== 3 || isNaN(parts[0])) return start;
+    const d = new Date(parts[0], parts[1] - 1, parts[2]);
     if (pt === 'WEEKLY') d.setDate(d.getDate() + 7);
     else if (pt === 'MONTHLY') d.setDate(d.getDate() + 30);
-    return d.toISOString().split('T')[0];
+    const yr = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${day}`;
   };
 
   // Reset form whenever a new seat is opened
@@ -80,14 +84,14 @@ export const CabinStudentSelectModal = ({
   const pendingAmount = Math.max(0, totalAmount - parsedPaid);
   const paymentStatus = parsedPaid >= totalAmount ? 'PAID' : parsedPaid > 0 ? 'PARTIAL' : 'PENDING';
 
-  // ── Shift options ──
+  // ── Shift options (Operating hours: 6:00 AM - 9:00 PM) ──
   const SHIFTS = [
-    { id: 'MORNING', label: 'Morning', time: '07:00 AM – 12:00 PM' },
+    { id: 'MORNING', label: 'Morning', time: '06:00 AM – 12:00 PM' },
     { id: 'AFTERNOON', label: 'Afternoon', time: '12:00 PM – 05:00 PM' },
-    { id: 'EVENING', label: 'Evening', time: '05:00 PM – 10:00 PM' },
-    { id: 'FULL_DAY', label: 'Full Day', time: '07:00 AM – 10:00 PM' },
+    { id: 'EVENING', label: 'Evening', time: '05:00 PM – 09:00 PM' },
+    { id: 'FULL_DAY', label: 'Full Day', time: '06:00 AM – 09:00 PM' },
   ];
-  const shiftTime = SHIFTS.find(s => s.id === shift)?.time || '07:00 AM – 10:00 PM';
+  const shiftTime = SHIFTS.find(s => s.id === shift)?.time || '06:00 AM – 09:00 PM';
 
   const handlePassTypeChange = (pt) => {
     setPassType(pt);
@@ -487,7 +491,7 @@ export const CabinStudentSelectModal = ({
                     ['Booking Code', currentOccupantBooking?.bookingCode || '—'],
                     ['Pass Duration', `${currentOccupantBooking?.passType || 'MONTHLY'} Pass`],
                     ['Assigned Locker', assignedLocker ? `${assignedLocker.label || assignedLocker.lockerNumber} (Key Locker)` : 'None'],
-                    ['Shift / Hours', currentOccupantBooking?.shift || currentOccupantBooking?.bookingTime || 'Full Day (07:00 AM – 10:00 PM)'],
+                    ['Shift / Hours', currentOccupantBooking?.shift || currentOccupantBooking?.bookingTime || 'Full Day (06:00 AM – 09:00 PM)'],
                     ['Payment Status', currentOccupantBooking?.paymentStatus || 'PAID'],
                   ].map(([label, value]) => (
                     <div key={label}>

@@ -11,29 +11,45 @@ export const ReservationConfirmModal = ({
   booking,
   onConfirmSuccess
 }) => {
-  const { seats = [], lockers = [], updateBookingDetails, changeSeatStatus, assignLocker, updateUser } = useBooking();
+  const { seats = [], lockers = [], updateBookingDetails, changeSeatStatus, assignLocker, updateUser, approveBooking } = useBooking();
 
   const [seatId, setSeatId] = useState('');
   const [passType, setPassType] = useState('DAILY');
   const [shift, setShift] = useState('FULL_DAY');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [arrivalTime, setArrivalTime] = useState('07:00 AM');
+  const [arrivalTime, setArrivalTime] = useState('06:00 AM');
   const [hasLocker, setHasLocker] = useState(false);
   const [lockerNumber, setLockerNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [amountPaid, setAmountPaid] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
+  const computeExpectedEndDate = (startStr, pt) => {
+    if (!startStr) return '';
+    const parts = startStr.split('-').map(Number);
+    if (parts.length !== 3 || isNaN(parts[0])) return startStr;
+    const d = new Date(parts[0], parts[1] - 1, parts[2]);
+    const pass = (pt || 'DAILY').toUpperCase();
+    if (pass === 'WEEKLY') d.setDate(d.getDate() + 7);
+    else if (pass === 'MONTHLY') d.setDate(d.getDate() + 30);
+    const yr = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${day}`;
+  };
+
   useEffect(() => {
     if (isOpen && booking) {
       setSeatId(booking.seatId || '');
-      setPassType(booking.passType || 'DAILY');
+      const pt = booking.passType || 'DAILY';
+      setPassType(pt);
       setShift(booking.shift || 'FULL_DAY');
       const today = new Date().toISOString().split('T')[0];
-      setStartDate(booking.startDate || today);
-      setEndDate(booking.endDate || today);
-      setArrivalTime(booking.arrivalTime || booking.bookingTime || '07:00 AM');
+      const start = booking.startDate || today;
+      setStartDate(start);
+      setEndDate(booking.endDate || computeExpectedEndDate(start, pt));
+      setArrivalTime(booking.arrivalTime || booking.bookingTime || '06:00 AM');
       setHasLocker(!!booking.hasLocker);
       setLockerNumber(booking.lockerNumber || '');
       setPaymentMethod(booking.paymentMethod || 'CASH');
@@ -66,8 +82,8 @@ export const ReservationConfirmModal = ({
       const selectedSeatObj = seats.find(s => s.id === seatId) || currentSeat;
       const targetSeatNumber = selectedSeatObj.seatNumber || booking.seatNumber;
 
-      // 1. Update Booking in Firestore
-      await updateBookingDetails(booking.id, {
+      // 1. Atomically approve booking & reserve seat in Firestore via transaction
+      await approveBooking(booking.id, {
         seatId: selectedSeatObj.id || seatId,
         seatNumber: targetSeatNumber,
         passType,
@@ -75,37 +91,31 @@ export const ReservationConfirmModal = ({
         startDate,
         endDate,
         arrivalTime,
-        bookingTime: arrivalTime,
         hasLocker,
         lockerNumber: hasLocker ? lockerNumber : '',
-        basePrice,
-        lockerFee,
         totalAmount,
         amountPaid: parsedPaid,
         pendingAmount,
         paymentStatus,
-        paymentMethod,
-        status: 'CONFIRMED',
-        confirmedAt: new Date().toISOString()
+        paymentMethod
       });
 
-      // 2. Update Seat Status in Firestore to OCCUPIED
-      if (selectedSeatObj.id) {
-        await changeSeatStatus(selectedSeatObj.id, 'OCCUPIED');
-      }
-
-      // 3. Update User Table
+      // 2. Update User Table if student has user profile
       if (booking.userId) {
-        await updateUser(booking.userId, {
-          assignedSeat: `Desk ${targetSeatNumber}`,
-          seatNumber: targetSeatNumber,
-          passType,
-          status: 'ACTIVE',
-          membershipStatus: 'ACTIVE'
-        });
+        try {
+          await updateUser(booking.userId, {
+            assignedSeat: `Desk ${targetSeatNumber}`,
+            seatNumber: targetSeatNumber,
+            passType,
+            status: 'ACTIVE',
+            membershipStatus: 'ACTIVE'
+          });
+        } catch (uErr) {
+          console.warn('Could not sync user profile:', uErr);
+        }
       }
 
-      // 4. Update Locker if assigned
+      // 3. Update Locker if assigned
       if (hasLocker && lockerNumber) {
         const matchingLocker = lockers.find(l => l.lockerNumber === lockerNumber || l.id === lockerNumber);
         if (matchingLocker) {
@@ -118,17 +128,17 @@ export const ReservationConfirmModal = ({
             passType,
             startDate,
             endDate,
-            notes: `Confirmed online reservation ${booking.bookingCode}`
+            notes: `Approved online reservation ${booking.bookingCode}`
           });
         }
       }
 
-      alert(`✅ Reservation ${booking.bookingCode} confirmed!\nDesk #${targetSeatNumber} is now OCCUPIED for ${booking.userName}.`);
+      alert(`✅ Reservation ${booking.bookingCode} APPROVED!\nDesk #${targetSeatNumber} is now RESERVED for ${booking.userName}.`);
       if (onConfirmSuccess) onConfirmSuccess();
       onClose();
     } catch (err) {
-      console.error('Error confirming reservation:', err);
-      alert('Failed to confirm reservation: ' + err.message);
+      console.error('Error approving reservation:', err);
+      alert('Failed to approve reservation: ' + err.message);
     } finally {
       setIsProcessing(false);
     }
@@ -168,7 +178,7 @@ export const ReservationConfirmModal = ({
               <CheckCircle2 size={24} />
             </div>
             <div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>Confirm Reservation & Check-in</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>Approve Reservation & Reserve Desk</div>
               <div style={{ fontSize: '0.78rem', color: '#94A3B8' }}>
                 Ref: <strong style={{ color: '#FCD34D' }}>{booking.bookingCode}</strong> • Submitted Online
               </div>
@@ -217,7 +227,15 @@ export const ReservationConfirmModal = ({
 
             <div>
               <label style={labelStyle}>Pass Duration</label>
-              <select value={passType} onChange={e => setPassType(e.target.value)} style={inputStyle}>
+              <select
+                value={passType}
+                onChange={e => {
+                  const newPt = e.target.value;
+                  setPassType(newPt);
+                  setEndDate(computeExpectedEndDate(startDate, newPt));
+                }}
+                style={inputStyle}
+              >
                 <option value="DAILY">Daily Pass (NPR {seatRate})</option>
                 <option value="WEEKLY">Weekly Pass (NPR 2,100)</option>
                 <option value="MONTHLY">Monthly Membership (NPR 7,500)</option>
@@ -228,11 +246,38 @@ export const ReservationConfirmModal = ({
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
             <div>
               <label style={labelStyle}>Start Date</label>
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={inputStyle} />
+              <input
+                type="date"
+                value={startDate}
+                onChange={e => {
+                  const newSd = e.target.value;
+                  setStartDate(newSd);
+                  setEndDate(computeExpectedEndDate(newSd, passType));
+                }}
+                style={inputStyle}
+              />
             </div>
             <div>
+              <label style={labelStyle}>Valid Until / Expiry Date</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={e => setEndDate(e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+            <div>
               <label style={labelStyle}>Expected Arrival Time</label>
-              <input type="text" value={arrivalTime} onChange={e => setArrivalTime(e.target.value)} style={inputStyle} />
+              <input type="text" value={arrivalTime} onChange={e => setArrivalTime(e.target.value)} placeholder="06:00 AM" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Operating Window</label>
+              <div style={{ padding: '0.6rem 0.8rem', backgroundColor: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>
+                ⏰ 06:00 AM – 09:00 PM Daily
+              </div>
             </div>
           </div>
 
@@ -328,7 +373,7 @@ export const ReservationConfirmModal = ({
               }}
             >
               <CheckCircle2 size={16} />
-              {isProcessing ? 'Processing Confirmation...' : 'Confirm & Occupy Desk'}
+              {isProcessing ? 'Processing Approval...' : 'Approve & Reserve Desk'}
             </button>
           </div>
 

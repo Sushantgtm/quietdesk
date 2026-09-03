@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { subscribeSeatAvailability, updateSeatStatusInFirestore, updateSeatDetailsInFirestore, createSeatInFirestore, deleteSeatInFirestore } from '../services/firebase/seatService';
-import { subscribeBookings, createBooking as createBookingService, updateBookingStatus, confirmBooking as confirmBookingService, updateBookingPaymentStatus, updateBookingDetails as updateBookingDetailsService } from '../services/firebase/bookingService';
+import { subscribeSeatAvailability, updateSeatStatusInFirestore, updateSeatDetailsInFirestore, createSeatInFirestore, deleteSeatInFirestore, reconcileSeatAvailabilityInFirestore } from '../services/firebase/seatService';
+import { subscribeBookings, createBooking as createBookingService, updateBookingStatus, confirmBooking as confirmBookingService, updateBookingPaymentStatus, updateBookingDetails as updateBookingDetailsService, approveBooking as approveBookingService, rejectBooking as rejectBookingService, createAdminBooking as createAdminBookingService } from '../services/firebase/bookingService';
 import { subscribePlans, createPlan as createPlanService, updatePlan as updatePlanService, deletePlan as deletePlanService } from '../services/firebase/pricingService';
 import { subscribeUsers, createUser as createUserService, updateUser as updateUserService, findOrCreateStudent as findOrCreateStudentService } from '../services/firebase/userService';
 import { subscribeAmenities, createAmenityInFirestore, updateAmenityInFirestore, deleteAmenityFromFirestore } from '../services/firebase/amenityService';
@@ -217,6 +217,18 @@ export const BookingProvider = ({ children }) => {
     await confirmBookingService(bookingId, seatId);
   };
 
+  const approveBooking = async (bookingId, approvalData) => {
+    return await approveBookingService(bookingId, approvalData);
+  };
+
+  const rejectBooking = async (bookingId, reason) => {
+    return await rejectBookingService(bookingId, reason);
+  };
+
+  const createAdminBooking = async (bookingData) => {
+    return await createAdminBookingService(bookingData);
+  };
+
   // User Management
   const createUser = async (userData) => {
     return await createUserService(userData);
@@ -333,6 +345,9 @@ export const BookingProvider = ({ children }) => {
         changePaymentStatus,
         updateBookingDetails,
         confirmBooking,
+        approveBooking,
+        rejectBooking,
+        createAdminBooking,
         createUser,
         updateUser,
         findOrCreateStudent: findOrCreateStudentService,
@@ -344,7 +359,8 @@ export const BookingProvider = ({ children }) => {
         deleteAmenity,
         createFaq,
         updateFaq,
-        deleteFaq
+        deleteFaq,
+        reconcileSeats: reconcileSeatAvailabilityInFirestore,
       }}
     >
       {children}

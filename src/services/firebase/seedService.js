@@ -39,7 +39,7 @@ export const MOCK_BRANCHES_DATA = [
     address: 'Lazimpat Road (Near Standard Chartered Bank), Kathmandu 44600',
     phone: '+977 9864826810',
     email: 'lazimpat@quietdesk.np',
-    hours: '7:00 AM - 10:00 PM (Seven days a week)',
+    hours: '6:00 AM - 9:00 PM (Seven days a week)',
     totalCapacity: 62,
     acousticPolicy: 'Strict Silence Enforced in Main Study Zones',
     facilities: ['Enterprise Wi-Fi', '24/7 Power Backup', 'Ergonomic Desk Stations', '20 Key Lockers']

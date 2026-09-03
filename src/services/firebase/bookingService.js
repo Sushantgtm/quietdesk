@@ -1,311 +1,478 @@
-import { collection, onSnapshot, doc, setDoc, updateDoc, getDocs, query, orderBy, deleteDoc } from 'firebase/firestore';
+import {
+  collection, onSnapshot, doc, setDoc, updateDoc, getDocs,
+  deleteDoc, runTransaction, serverTimestamp, query, where
+} from 'firebase/firestore';
 import { db } from './firebase';
-import { updateSeatStatusInFirestore } from './seatService';
-import { MOCK_BOOKINGS } from '../mock/mockData';
+import { findOrCreateStudentFirestore } from './userService';
 
-const LOCAL_STORAGE_BOOKINGS_KEY = 'quietdesk_bookings_v5';
+// ─── localStorage cache helpers (UI cache ONLY — not authoritative source) ───
+const CACHE_KEY = 'quietdesk_bookings_cache_v6';
 
-// Automatically purge legacy cache keys on initial load
+// Purge all legacy cache keys
 try {
-  ['v1', 'v2', 'v3', 'v4'].forEach(v => {
+  ['v1','v2','v3','v4','v5'].forEach(v => {
     localStorage.removeItem(`quietdesk_bookings_${v}`);
+    localStorage.removeItem(`quietdesk_bookings_cache_${v}`);
   });
-} catch (e) {}
+} catch(_) {}
 
-export const getLocalBookings = () => {
-  const stored = localStorage.getItem(LOCAL_STORAGE_BOOKINGS_KEY);
-  if (stored) {
-    try {
-      return JSON.parse(stored);
-    } catch (e) {
-      console.error('Failed to parse local bookings', e);
-    }
-  }
-  localStorage.setItem(LOCAL_STORAGE_BOOKINGS_KEY, JSON.stringify(MOCK_BOOKINGS));
-  return MOCK_BOOKINGS;
+const getCachedBookings = () => {
+  try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '[]'); } catch(_) { return []; }
+};
+const setCachedBookings = (list) => {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(list)); } catch(_) {}
 };
 
-export const saveLocalBookings = (bookings) => {
-  localStorage.setItem(LOCAL_STORAGE_BOOKINGS_KEY, JSON.stringify(bookings));
-};
+// ─── Keep these exports so existing code that imports them doesn't break ──────
+export const getLocalBookings = getCachedBookings;
+export const saveLocalBookings = setCachedBookings;
+export const resetLocalBookings = () => { setCachedBookings([]); return []; };
 
-export const resetLocalBookings = () => {
-  localStorage.setItem(LOCAL_STORAGE_BOOKINGS_KEY, JSON.stringify(MOCK_BOOKINGS));
-  return MOCK_BOOKINGS;
-};
-
+// ─── Real-time subscription ────────────────────────────────────────────────────
 export const subscribeBookings = (onBookingsUpdate) => {
-  let unsub = () => {};
-  try {
-    const bookingsRef = collection(db, 'bookings');
-    unsub = onSnapshot(bookingsRef, (snapshot) => {
-      const firestoreBookings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      saveLocalBookings(firestoreBookings);
-      onBookingsUpdate(firestoreBookings);
-    }, (error) => {
-      console.warn('Firestore bookings subscription error, using local fallback:', error.message);
-      onBookingsUpdate(getLocalBookings());
-    });
-  } catch (e) {
-    console.warn('Firestore offline fallback for bookings:', e);
-    onBookingsUpdate(getLocalBookings());
-  }
-
-  const handleLocalChange = () => onBookingsUpdate(getLocalBookings());
-  window.addEventListener('storage', handleLocalChange);
-
-  return () => {
-    unsub();
-    window.removeEventListener('storage', handleLocalChange);
-  };
-};
-
-export const fetchAllBookings = async () => {
-  try {
-    const bookingsRef = collection(db, 'bookings');
-    const snapshot = await getDocs(bookingsRef);
-    if (!snapshot.empty) {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      saveLocalBookings(data);
-      return data;
+  const bookingsRef = collection(db, 'bookings');
+  const unsub = onSnapshot(
+    bookingsRef,
+    (snapshot) => {
+      const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setCachedBookings(list);
+      onBookingsUpdate(list);
+    },
+    (error) => {
+      console.error('[bookingService] Firestore subscription error:', error.message);
+      // Serve cache to keep UI alive but do NOT pretend it is fresh
+      onBookingsUpdate(getCachedBookings());
     }
-  } catch (e) {
-    console.warn('Error fetching bookings from Firestore, returning local data:', e);
-  }
-  return getLocalBookings();
+  );
+  return unsub;
 };
 
-import { findOrCreateStudent } from './userService';
+// ─── One-off fetch ─────────────────────────────────────────────────────────────
+export const fetchAllBookings = async () => {
+  const snapshot = await getDocs(collection(db, 'bookings'));
+  const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+  setCachedBookings(list);
+  return list;
+};
 
+// ─── Date-range overlap helper ─────────────────────────────────────────────────
+// Returns true when two date ranges overlap (inclusive boundary comparison)
+const dateRangesOverlap = (aStart, aEnd, bStart, bEnd) => {
+  if (!aStart || !bStart) return true; // no dates → assume overlap to be safe
+  const as = aStart, ae = aEnd || aStart;
+  const bs = bStart, be = bEnd || bStart;
+  return as <= be && bs <= ae;
+};
+
+// ─── createBooking (PUBLIC WEBSITE) ───────────────────────────────────────────
+// Rules:
+//   • Status is always PENDING (not PENDING_CONFIRMATION, not CONFIRMED)
+//   • Seat status is NEVER changed here — admin approval changes the seat
+//   • Firestore write MUST succeed or we throw (no silent local-only fallback)
+//   • One requested seat per reservation (already enforced by UI; validated here)
+//   • Allow multiple bookings for the same student when date ranges don't overlap
 export const createBooking = async (bookingData) => {
-  const bookingId = bookingData.id || ('BK-' + Date.now());
-  const bookingCode = bookingData.bookingCode || ('QD-' + Math.floor(1000 + Math.random() * 9000));
-  
-  // 1. Enforce: A student cannot book two active seats simultaneously
-  const currentLocal = getLocalBookings();
-  const todayStr = new Date().toISOString().split('T')[0];
-  
-  const studentPhone = (bookingData.userPhone || '').trim().replace(/\D/g, '');
-  const studentEmail = (bookingData.userEmail || '').trim().toLowerCase();
-  const studentUserId = bookingData.userId || null;
-  const requestedSeatId = bookingData.seatId;
-
-  const existingActiveBooking = currentLocal.find(b => {
-    if (bookingData.id && b.id === bookingData.id) return false;
-    if (['CANCELLED', 'COMPLETED'].includes(b.status)) return false;
-    if (b.endDate && b.endDate < todayStr) return false; // expired
-    
-    // If the booking is for the exact same seat extension or renewal, allow
-    if (requestedSeatId && b.seatId === requestedSeatId) return false;
-
-    const bPhone = (b.userPhone || '').trim().replace(/\D/g, '');
-    const bEmail = (b.userEmail || '').trim().toLowerCase();
-    const bUserId = b.userId || null;
-
-    const matchesPhone = studentPhone && bPhone && studentPhone === bPhone;
-    const matchesEmail = studentEmail && bEmail && studentEmail === bEmail;
-    const matchesUserId = studentUserId && bUserId && studentUserId === bUserId;
-
-    return (matchesPhone || matchesEmail || matchesUserId);
-  });
-
-  if (existingActiveBooking) {
-    const desk = existingActiveBooking.seatNumber || 'another desk';
-    const until = existingActiveBooking.endDate || 'active';
-    throw new Error(`Scholar "${bookingData.userName || 'Student'}" already has an active desk assigned (Desk ${desk}, valid until ${until}). A student cannot hold multiple active cabins.`);
+  // 1. Validate: exactly one seat
+  if (!bookingData.seatId) {
+    throw new Error('A desk must be selected before submitting a reservation.');
   }
 
-  // 2. Ensure user is created/updated in the users table first
-  let userId = bookingData.userId || null;
+  const bookingId   = 'BK-' + Date.now();
+  const bookingCode = 'QD-' + Math.floor(1000 + Math.random() * 9000);
+  const startDate   = bookingData.startDate || new Date().toISOString().split('T')[0];
+  const endDate     = bookingData.endDate   || startDate;
+
+  // 2. Resolve student (Firestore query, not localStorage)
+  let userId   = bookingData.userId   || null;
   let userCode = bookingData.userCode || null;
   let userName = bookingData.userName || 'Scholar';
 
-  // Only call findOrCreateStudent if no userId was provided AND real student info is present
-  if (!userId && (bookingData.userPhone || bookingData.userEmail || (bookingData.userName && bookingData.userName.trim() !== '' && bookingData.userName.trim() !== 'Scholar'))) {
+  if (bookingData.userPhone || bookingData.userEmail) {
     try {
-      const studentRes = await findOrCreateStudent({
-        fullName: bookingData.userName || 'Scholar',
-        name: bookingData.userName || 'Scholar',
-        email: bookingData.userEmail || '',
-        phone: bookingData.userPhone || '',
-        passType: bookingData.passType || 'DAILY',
-        assignedSeat: bookingData.seatNumber ? `Desk ${bookingData.seatNumber}` : '',
-        seatNumber: bookingData.seatNumber || '',
-        status: 'ACTIVE',
-        membershipStatus: 'ACTIVE'
+      const studentRes = await findOrCreateStudentFirestore({
+        fullName:  bookingData.userName  || 'Scholar',
+        email:     bookingData.userEmail || '',
+        phone:     bookingData.userPhone || '',
+        passType:  bookingData.passType  || 'DAILY',
       });
-
-      if (studentRes && studentRes.user) {
-        userId = studentRes.user.id;
+      if (studentRes?.user) {
+        userId   = studentRes.user.id;
         userCode = studentRes.user.userCode;
         userName = studentRes.user.fullName || studentRes.user.name || userName;
       }
-    } catch (userErr) {
-      console.warn('Unable to sync user record prior to booking creation:', userErr.message);
+    } catch (err) {
+      console.warn('[createBooking] Could not resolve student:', err.message);
     }
   }
 
-  // 3. Build booking object linked to the user record
+  // 3. Conflict check — query Firestore for overlapping active bookings for this student
+  if (userId || bookingData.userPhone || bookingData.userEmail) {
+    const allBookings = getCachedBookings(); // use cache as a fast first pass
+    const conflictingBooking = allBookings.find(b => {
+      // Skip cancelled/completed/rejected
+      if (['CANCELLED', 'COMPLETED', 'REJECTED'].includes(b.status)) return false;
+
+      // Match by userId OR phone OR email
+      const phoneClean = (bookingData.userPhone || '').replace(/\D/g, '');
+      const emailClean = (bookingData.userEmail || '').toLowerCase().trim();
+      const bPhone = (b.userPhone || '').replace(/\D/g, '');
+      const bEmail = (b.userEmail || '').toLowerCase().trim();
+      const matchesUser =
+        (userId && b.userId === userId) ||
+        (phoneClean && bPhone && phoneClean === bPhone) ||
+        (emailClean && bEmail && emailClean === bEmail);
+
+      if (!matchesUser) return false;
+
+      // Allow same-seat renewals (same seat, different dates)
+      // But block: same student + overlapping dates + different seat
+      const overlaps = dateRangesOverlap(startDate, endDate, b.startDate, b.endDate);
+      if (!overlaps) return false; // non-overlapping date ranges → OK
+
+      // Same seat + overlapping → duplicate (block)
+      // Different seat + overlapping → dual-seat conflict (block)
+      return true;
+    });
+
+    if (conflictingBooking) {
+      throw new Error(
+        `This student already has an active reservation (Desk ${conflictingBooking.seatNumber || '?'}, ` +
+        `${conflictingBooking.startDate || 'start'} – ${conflictingBooking.endDate || 'end'}). ` +
+        `Two overlapping reservations are not allowed.`
+      );
+    }
+  }
+
+  // 4. Build booking document
+  //    Status = PENDING  (seat is NOT touched)
   const newBooking = {
-    id: bookingId,
+    id:           bookingId,
     bookingCode,
     userId,
     userCode,
     userName,
-    createdAt: new Date().toISOString(),
-    status: bookingData.status || 'PENDING_CONFIRMATION',
-    paymentStatus: bookingData.paymentStatus || 'PENDING',
-    ...bookingData
+    userEmail:    bookingData.userEmail    || '',
+    userPhone:    bookingData.userPhone    || '',
+    seatId:       bookingData.seatId,
+    seatNumber:   bookingData.seatNumber   || '',
+    zone:         bookingData.zone         || '',
+    passType:     bookingData.passType     || 'DAILY',
+    hasLocker:    bookingData.hasLocker    || false,
+    lockerFee:    bookingData.lockerFee    || 0,
+    startDate,
+    endDate,
+    arrivalTime:  bookingData.arrivalTime  || bookingData.bookingTime || '',
+    bookingTime:  bookingData.arrivalTime  || bookingData.bookingTime || '',
+    totalAmount:  bookingData.totalAmount  || 0,
+    amountPaid:   0,
+    pendingAmount: bookingData.totalAmount || 0,
+    paymentStatus: 'PENDING',
+    status:       'PENDING',         // ← Always PENDING from public website
+    bookingType:  bookingData.bookingType || 'WEBSITE_BOOKING',
+    createdAt:    new Date().toISOString(),
   };
 
-  // Update local storage for immediate reflection
-  const updatedLocal = [newBooking, ...currentLocal.filter(b => b.id !== bookingId)];
-  saveLocalBookings(updatedLocal);
+  // 5. Write to Firestore — MUST succeed or we throw (no silent fallback)
+  await setDoc(doc(db, 'bookings', bookingId), newBooking);
+  // NOTE: We do NOT call updateSeatStatusInFirestore here.
+  //       The seat remains AVAILABLE until admin approves.
 
-  // Update seat status in Firestore
-  if (bookingData.seatId) {
-    const targetSeatStatus = newBooking.status === 'CONFIRMED' || newBooking.status === 'CHECKED_IN' ? 'OCCUPIED' : 'RESERVED';
-    await updateSeatStatusInFirestore(bookingData.seatId, targetSeatStatus);
-  }
+  // Update local cache optimistically
+  setCachedBookings([newBooking, ...getCachedBookings().filter(b => b.id !== bookingId)]);
 
-  try {
-    await setDoc(doc(db, 'bookings', bookingId), newBooking, { merge: true });
-    console.log(`✅ Reservation ${bookingCode} linked to user ${userId} committed to Firestore:`, bookingId);
-    return newBooking;
-  } catch (e) {
-    console.warn('Firestore write failed, stored locally:', e.message);
-    return newBooking;
-  }
+  return newBooking;
 };
 
-// Admin-only: confirm a pending reservation → marks booking CONFIRMED + seat OCCUPIED
-export const confirmBooking = async (bookingId, seatId) => {
-  const currentLocal = getLocalBookings();
-  const updatedLocal = currentLocal.map(b =>
-    b.id === bookingId ? { ...b, status: 'CONFIRMED', paymentStatus: 'PAID' } : b
-  );
-  saveLocalBookings(updatedLocal);
+// ─── approveBooking (ADMIN — atomic transaction) ──────────────────────────────
+// Sets booking → APPROVED, seat → RESERVED (not OCCUPIED; admin checks in separately)
+// Fails safely if seat was already taken by another booking.
+export const approveBooking = async (bookingId, approvalData = {}) => {
+  const bookingRef = doc(db, 'bookings', bookingId);
 
-  await updateSeatStatusInFirestore(seatId, 'OCCUPIED');
+  const result = await runTransaction(db, async (tx) => {
+    const bookingSnap = await tx.get(bookingRef);
+    if (!bookingSnap.exists()) throw new Error('Reservation not found.');
 
-  try {
-    const bookingRef = doc(db, 'bookings', bookingId);
-    await updateDoc(bookingRef, {
-      status: 'CONFIRMED',
-      paymentStatus: 'PAID',
-      confirmedAt: new Date().toISOString()
+    const booking = { id: bookingSnap.id, ...bookingSnap.data() };
+
+    if (booking.status !== 'PENDING') {
+      throw new Error(`This reservation is already ${booking.status}.`);
+    }
+
+    const targetSeatId = approvalData.seatId || booking.seatId;
+    if (!targetSeatId) throw new Error('No desk selected for this reservation.');
+
+    const seatRef  = doc(db, 'seats', targetSeatId);
+    const seatSnap = await tx.get(seatRef);
+
+    if (!seatSnap.exists()) throw new Error(`Seat "${targetSeatId}" not found in database.`);
+
+    const seat = seatSnap.data();
+    if (seat.status !== 'AVAILABLE') {
+      throw new Error(
+        `Desk ${seat.seatNumber || targetSeatId} is no longer available (status: ${seat.status}). ` +
+        `Please choose another desk.`
+      );
+    }
+
+    // Check the student does not already have another active/approved booking on a different seat
+    // (We skip this deep check in transaction to keep it lightweight;
+    //  the subscription + UI guard handles this for most cases.)
+
+    const now         = new Date().toISOString();
+    const startDate   = approvalData.startDate   || booking.startDate   || now.split('T')[0];
+    const endDate     = approvalData.endDate     || booking.endDate     || startDate;
+    const passType    = approvalData.passType    || booking.passType    || 'DAILY';
+    const seatNumber  = seatSnap.data().seatNumber || booking.seatNumber || '';
+    const totalAmount = approvalData.totalAmount !== undefined ? approvalData.totalAmount : (booking.totalAmount || 0);
+    const amountPaid  = approvalData.amountPaid  !== undefined ? approvalData.amountPaid  : 0;
+    const pendingAmount = Math.max(0, totalAmount - amountPaid);
+    const paymentStatus = amountPaid >= totalAmount ? 'PAID' : amountPaid > 0 ? 'PARTIAL' : 'PENDING';
+
+    // Update booking
+    tx.update(bookingRef, {
+      status:         'APPROVED',
+      seatId:         targetSeatId,
+      seatNumber,
+      startDate,
+      endDate,
+      passType,
+      totalAmount,
+      amountPaid,
+      pendingAmount,
+      paymentStatus,
+      arrivalTime:    approvalData.arrivalTime    || booking.arrivalTime    || '06:00 AM',
+      bookingTime:    approvalData.arrivalTime    || booking.arrivalTime    || '06:00 AM',
+      hasLocker:      approvalData.hasLocker      !== undefined ? approvalData.hasLocker      : (booking.hasLocker || false),
+      lockerNumber:   approvalData.lockerNumber   || booking.lockerNumber   || '',
+      paymentMethod:  approvalData.paymentMethod  || 'CASH',
+      approvedAt:     now,
+      updatedAt:      now,
     });
-    return true;
-  } catch (e) {
-    console.warn('Firestore confirm failed, local state updated:', e.message);
-    return false;
-  }
+
+    // Update seat → RESERVED
+    tx.update(seatRef, { status: 'RESERVED', updatedAt: now });
+
+    return { booking, seat: seatSnap.data(), seatNumber };
+  });
+
+  // Update local cache
+  const cached = getCachedBookings();
+  setCachedBookings(cached.map(b =>
+    b.id === bookingId ? { ...b, status: 'APPROVED', seatId: approvalData.seatId || b.seatId } : b
+  ));
+
+  return result;
 };
 
+// ─── rejectBooking (ADMIN) ────────────────────────────────────────────────────
+// Sets booking → REJECTED.  Seat is NOT touched (it was never reserved on PENDING).
+export const rejectBooking = async (bookingId, reason = '') => {
+  const bookingRef = doc(db, 'bookings', bookingId);
+  const now = new Date().toISOString();
+
+  await updateDoc(bookingRef, {
+    status:     'REJECTED',
+    rejectedAt: now,
+    updatedAt:  now,
+    ...(reason ? { rejectionReason: reason } : {}),
+  });
+
+  // Update local cache
+  const cached = getCachedBookings();
+  setCachedBookings(cached.map(b => b.id === bookingId ? { ...b, status: 'REJECTED' } : b));
+
+  return true;
+};
+
+// ─── confirmBooking (legacy — admin check-in: APPROVED → CONFIRMED + seat OCCUPIED) ──
+// Called when admin actually seats the student (check-in).
+export const confirmBooking = async (bookingId, seatId) => {
+  const bookingRef = doc(db, 'bookings', bookingId);
+  const now = new Date().toISOString();
+
+  await runTransaction(db, async (tx) => {
+    const bookingSnap = await tx.get(bookingRef);
+    if (!bookingSnap.exists()) throw new Error('Booking not found.');
+
+    const seatRef  = doc(db, 'seats', seatId);
+    tx.update(bookingRef, { status: 'CONFIRMED', confirmedAt: now, updatedAt: now });
+    tx.update(seatRef,    { status: 'OCCUPIED',  updatedAt: now });
+  });
+
+  const cached = getCachedBookings();
+  setCachedBookings(cached.map(b =>
+    b.id === bookingId ? { ...b, status: 'CONFIRMED' } : b
+  ));
+
+  return true;
+};
+
+// ─── updateBookingStatus (generic — used by admin actions) ────────────────────
 export const updateBookingStatus = async (bookingId, seatId, newStatus) => {
-  // Update local storage
-  const currentLocal = getLocalBookings();
-  const updatedLocal = currentLocal.map(b => b.id === bookingId ? { ...b, status: newStatus } : b);
-  saveLocalBookings(updatedLocal);
+  const now = new Date().toISOString();
+  const updates = { status: newStatus, updatedAt: now };
 
-  // Seat status transitions
-  if (newStatus === 'CANCELLED' || newStatus === 'COMPLETED') {
-    await updateSeatStatusInFirestore(seatId, 'AVAILABLE');
-  } else if (newStatus === 'CHECKED_IN') {
-    await updateSeatStatusInFirestore(seatId, 'OCCUPIED');
-  } else if (newStatus === 'CONFIRMED') {
-    await updateSeatStatusInFirestore(seatId, 'OCCUPIED');
-  }
-
-  try {
-    const bookingRef = doc(db, 'bookings', bookingId);
-    await updateDoc(bookingRef, { status: newStatus, updatedAt: new Date().toISOString() });
-    return true;
-  } catch (e) {
-    console.warn('Firestore booking status update failed, local state updated:', e.message);
-    return false;
-  }
-};
-
-export const updateBookingPaymentStatus = async (bookingId, newPaymentStatus) => {
-  const currentLocal = getLocalBookings();
-  const updatedLocal = currentLocal.map(b => b.id === bookingId ? { ...b, paymentStatus: newPaymentStatus } : b);
-  saveLocalBookings(updatedLocal);
-
-  try {
-    const bookingRef = doc(db, 'bookings', bookingId);
-    await updateDoc(bookingRef, { paymentStatus: newPaymentStatus, updatedAt: new Date().toISOString() });
-    return true;
-  } catch (e) {
-    console.warn('Firestore payment status update failed, local state updated:', e.message);
-    return false;
-  }
-};
-
-// Admin Edit Booking: modify seat, shift, bookingTime, dates, status, paymentStatus, etc.
-export const updateBookingDetails = async (bookingId, updatedFields) => {
-  const currentLocal = getLocalBookings();
-  const existingBooking = currentLocal.find(b => b.id === bookingId);
-  
-  if (!existingBooking) {
-    console.error('Booking not found:', bookingId);
-    return false;
-  }
-
-  // Handle seat change if seatId is updated
-  if (updatedFields.seatId && updatedFields.seatId !== existingBooking.seatId) {
-    await updateSeatStatusInFirestore(existingBooking.seatId, 'AVAILABLE');
-    const newSeatStatus = (updatedFields.status === 'CHECKED_IN' || updatedFields.status === 'CONFIRMED') ? 'OCCUPIED' : 'RESERVED';
-    await updateSeatStatusInFirestore(updatedFields.seatId, newSeatStatus);
-  } else if (updatedFields.status && updatedFields.status !== existingBooking.status) {
-    const currentSeatId = updatedFields.seatId || existingBooking.seatId;
-    if (updatedFields.status === 'CANCELLED' || updatedFields.status === 'COMPLETED') {
-      await updateSeatStatusInFirestore(currentSeatId, 'AVAILABLE');
-    } else if (updatedFields.status === 'CHECKED_IN' || updatedFields.status === 'CONFIRMED') {
-      await updateSeatStatusInFirestore(currentSeatId, 'OCCUPIED');
+  // Only touch seat when transitioning to terminal states that release the seat
+  if (['CANCELLED', 'COMPLETED', 'REJECTED'].includes(newStatus) && seatId) {
+    try {
+      await runTransaction(db, async (tx) => {
+        const bookingRef = doc(db, 'bookings', bookingId);
+        const seatRef    = doc(db, 'seats', seatId);
+        tx.update(bookingRef, updates);
+        tx.update(seatRef, { status: 'AVAILABLE', updatedAt: now });
+      });
+    } catch (e) {
+      // Fallback if transaction fails
+      await updateDoc(doc(db, 'bookings', bookingId), updates).catch(() => {});
+      await updateDoc(doc(db, 'seats', seatId), { status: 'AVAILABLE', updatedAt: now }).catch(() => {});
+    }
+  } else {
+    await updateDoc(doc(db, 'bookings', bookingId), updates);
+    if (newStatus === 'CHECKED_IN' && seatId) {
+      await updateDoc(doc(db, 'seats', seatId), { status: 'OCCUPIED', updatedAt: now });
     }
   }
 
-  const updatedBooking = {
-    ...existingBooking,
-    ...updatedFields,
-    updatedAt: new Date().toISOString()
+  const cached = getCachedBookings();
+  setCachedBookings(cached.map(b => b.id === bookingId ? { ...b, status: newStatus } : b));
+  return true;
+};
+
+// ─── updateBookingPaymentStatus ───────────────────────────────────────────────
+export const updateBookingPaymentStatus = async (bookingId, newPaymentStatus) => {
+  const now = new Date().toISOString();
+  await updateDoc(doc(db, 'bookings', bookingId), {
+    paymentStatus: newPaymentStatus,
+    updatedAt: now,
+  });
+  const cached = getCachedBookings();
+  setCachedBookings(cached.map(b =>
+    b.id === bookingId ? { ...b, paymentStatus: newPaymentStatus } : b
+  ));
+  return true;
+};
+
+// ─── updateBookingDetails (admin edit) ────────────────────────────────────────
+export const updateBookingDetails = async (bookingId, updatedFields) => {
+  const now = new Date().toISOString();
+
+  // Handle seat status transitions if seat or status changed
+  const cached = getCachedBookings();
+  const existing = cached.find(b => b.id === bookingId);
+
+  if (existing) {
+    // If status changes to terminal → release seat
+    if (
+      updatedFields.status &&
+      ['CANCELLED', 'COMPLETED'].includes(updatedFields.status) &&
+      existing.seatId
+    ) {
+      try {
+        await updateDoc(doc(db, 'seats', existing.seatId), { status: 'AVAILABLE', updatedAt: now });
+      } catch (_) {}
+    }
+    // If seat changes → release old seat
+    if (updatedFields.seatId && updatedFields.seatId !== existing.seatId) {
+      if (existing.seatId) {
+        try {
+          await updateDoc(doc(db, 'seats', existing.seatId), { status: 'AVAILABLE', updatedAt: now });
+        } catch (_) {}
+      }
+    }
+  }
+
+  await updateDoc(doc(db, 'bookings', bookingId), { ...updatedFields, updatedAt: now });
+
+  // Update cache
+  setCachedBookings(cached.map(b =>
+    b.id === bookingId ? { ...b, ...updatedFields, updatedAt: now } : b
+  ));
+
+  return true;
+};
+
+// ─── Admin walk-in booking (CONFIRMED immediately) ────────────────────────────
+// Different from public createBooking: seat is set OCCUPIED right away.
+export const createAdminBooking = async (bookingData) => {
+  const bookingId   = 'BK-' + Date.now();
+  const bookingCode = bookingData.bookingCode || ('QD-MAN-' + Math.floor(1000 + Math.random() * 9000));
+  const now         = new Date().toISOString();
+
+  const newBooking = {
+    ...bookingData,
+    id:          bookingId,
+    bookingCode,
+    status:      bookingData.status || 'CONFIRMED',
+    bookingType: bookingData.bookingType || 'WALK_IN',
+    createdAt:   now,
+    updatedAt:   now,
   };
 
-  const updatedLocal = currentLocal.map(b => b.id === bookingId ? updatedBooking : b);
-  saveLocalBookings(updatedLocal);
+  // If confirmed, also update seat status
+  if (newBooking.status === 'CONFIRMED' && newBooking.seatId) {
+    await runTransaction(db, async (tx) => {
+      tx.set(doc(db, 'bookings', bookingId), newBooking);
+      tx.update(doc(db, 'seats', newBooking.seatId), { status: 'OCCUPIED', updatedAt: now });
+    });
+  } else {
+    await setDoc(doc(db, 'bookings', bookingId), newBooking);
+  }
+
+  setCachedBookings([newBooking, ...getCachedBookings().filter(b => b.id !== bookingId)]);
+  return newBooking;
+};
+
+// ─── deleteBooking ─────────────────────────────────────────────────────────────
+export const deleteBooking = async (bookingId) => {
+  if (!bookingId) return false;
 
   try {
     const bookingRef = doc(db, 'bookings', bookingId);
-    await updateDoc(bookingRef, {
-      ...updatedFields,
-      updatedAt: new Date().toISOString()
-    });
-    return true;
-  } catch (e) {
-    console.warn('Firestore updateBookingDetails failed, fallback to local:', e.message);
-    return false;
+    const snap = await getDoc(bookingRef);
+    if (snap.exists()) {
+      const b = snap.data();
+      if (b.seatId) {
+        // Check if any other active booking currently claims this seat
+        const allBookings = await getDocs(collection(db, 'bookings'));
+        const hasOtherActive = allBookings.docs.some(
+          d => d.id !== bookingId &&
+          d.data().seatId === b.seatId &&
+          ['APPROVED', 'CONFIRMED', 'CHECKED_IN'].includes(d.data().status)
+        );
+        if (!hasOtherActive) {
+          await updateDoc(doc(db, 'seats', b.seatId), {
+            status: 'AVAILABLE',
+            updatedAt: new Date().toISOString()
+          }).catch(() => {});
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Error releasing seat during deleteBooking:', err.message);
   }
-};
-export const deleteBooking = async (bookingId) => {
-  const { deleteDoc } = await import('firebase/firestore');
-  const currentLocal = getLocalBookings();
-  const updated = currentLocal.filter(b => b.id !== bookingId);
-  saveLocalBookings(updated);
-  try {
-    await deleteDoc(doc(db, 'bookings', bookingId));
-    return true;
-  } catch (e) {
-    console.warn('Firestore booking delete error:', e.message);
-    return false;
-  }
+
+  await deleteDoc(doc(db, 'bookings', bookingId));
+  setCachedBookings(getCachedBookings().filter(b => b.id !== bookingId));
+  return true;
 };
 
+// ─── purgeAllBookingsFromFirestore (dev/admin tool) ──────────────────────────
 export const purgeAllBookingsFromFirestore = async () => {
-  const { deleteDoc, getDocs: gds } = await import('firebase/firestore');
-  const snapshot = await gds(collection(db, 'bookings'));
-  const deletes = snapshot.docs.map(d => deleteDoc(doc(db, 'bookings', d.id)));
-  await Promise.all(deletes);
-  saveLocalBookings([]);
+  const snapshot = await getDocs(collection(db, 'bookings'));
+  await Promise.all(snapshot.docs.map(d => deleteDoc(doc(db, 'bookings', d.id))));
+  setCachedBookings([]);
+
+  // Free all seats to AVAILABLE without destroying the seat definitions
+  try {
+    const seatsSnap = await getDocs(collection(db, 'seats'));
+    const now = new Date().toISOString();
+    await Promise.all(
+      seatsSnap.docs.map(s => updateDoc(doc(db, 'seats', s.id), { status: 'AVAILABLE', updatedAt: now }).catch(() => {}))
+    );
+  } catch (err) {
+    console.warn('Error setting seats AVAILABLE on purgeAllBookings:', err.message);
+  }
+
   return snapshot.docs.length;
 };

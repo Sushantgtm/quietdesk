@@ -4,11 +4,16 @@ import { MOCK_LOCKERS } from '../mock/mockData';
 
 const LOCAL_STORAGE_LOCKERS_KEY = 'quietdesk_lockers_v3';
 
+const VALID_LOCKER_IDS = new Set(MOCK_LOCKERS.map(l => l.id));
+
 export const getLocalLockers = () => {
   const stored = localStorage.getItem(LOCAL_STORAGE_LOCKERS_KEY);
   if (stored) {
     try {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length === 20 && parsed.every(l => VALID_LOCKER_IDS.has(l.id))) {
+        return parsed;
+      }
     } catch (e) {
       console.error('Failed to parse local lockers', e);
     }
@@ -18,15 +23,23 @@ export const getLocalLockers = () => {
 };
 
 export const saveLocalLockers = (lockers) => {
-  localStorage.setItem(LOCAL_STORAGE_LOCKERS_KEY, JSON.stringify(lockers));
+  const sanitized = (lockers || []).filter(l => VALID_LOCKER_IDS.has(l.id));
+  localStorage.setItem(LOCAL_STORAGE_LOCKERS_KEY, JSON.stringify(sanitized));
 };
 
 export const seedLockersToFirestore = async () => {
   try {
+    const existingSnap = await getDocs(collection(db, 'lockers'));
+    // Clean up any extra or legacy locker IDs not in 20 standard lockers (A-T)
+    for (const d of existingSnap.docs) {
+      if (!VALID_LOCKER_IDS.has(d.id)) {
+        await deleteDoc(d.ref).catch(() => {});
+      }
+    }
     for (const locker of MOCK_LOCKERS) {
       await setDoc(doc(db, 'lockers', locker.id), locker, { merge: true });
     }
-    console.log('Successfully seeded 20 lockers (A-T) to Firestore');
+    console.log('Successfully synced exactly 20 lockers (A-T) to Firestore');
   } catch (e) {
     console.warn('Unable to seed Firestore lockers:', e.message);
   }
@@ -41,7 +54,27 @@ export const subscribeLockers = (onLockersUpdate) => {
         seedLockersToFirestore();
         onLockersUpdate(getLocalLockers());
       } else {
-        const firestoreLockers = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        // Filter strictly to 20 valid lockers A-T
+        const firestoreLockers = snapshot.docs
+          .filter(d => VALID_LOCKER_IDS.has(d.id))
+          .map(d => ({ id: d.id, ...d.data() }));
+
+        // Delete any non-standard extra lockers in background
+        snapshot.docs.forEach(d => {
+          if (!VALID_LOCKER_IDS.has(d.id)) {
+            deleteDoc(d.ref).catch(() => {});
+          }
+        });
+
+        // Ensure all 20 lockers exist; if some are missing, fill from MOCK_LOCKERS
+        const presentIds = new Set(firestoreLockers.map(l => l.id));
+        MOCK_LOCKERS.forEach(mockLocker => {
+          if (!presentIds.has(mockLocker.id)) {
+            firestoreLockers.push(mockLocker);
+            setDoc(doc(db, 'lockers', mockLocker.id), mockLocker, { merge: true }).catch(() => {});
+          }
+        });
+
         firestoreLockers.sort((a, b) => {
           return (a.lockerNumber || a.label || a.id || '').localeCompare(b.lockerNumber || b.label || b.id || '', undefined, { numeric: true, sensitivity: 'base' });
         });

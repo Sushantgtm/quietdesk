@@ -321,8 +321,8 @@ export const StudentProfileModal = ({
                             <td style={{ padding: '0.65rem 0.9rem' }}>
                               {badge(
                                 b.status,
-                                ['CONFIRMED', 'CHECKED_IN'].includes(b.status) ? '#ECFDF5' : b.status === 'PENDING_CONFIRMATION' ? '#FEF3C7' : '#F1F5F9',
-                                ['CONFIRMED', 'CHECKED_IN'].includes(b.status) ? '#047857' : b.status === 'PENDING_CONFIRMATION' ? '#B45309' : '#475569'
+                                ['CONFIRMED', 'CHECKED_IN', 'APPROVED'].includes(b.status) ? '#ECFDF5' : (b.status === 'PENDING' || b.status === 'PENDING_CONFIRMATION') ? '#FEF3C7' : '#F1F5F9',
+                                ['CONFIRMED', 'CHECKED_IN', 'APPROVED'].includes(b.status) ? '#047857' : (b.status === 'PENDING' || b.status === 'PENDING_CONFIRMATION') ? '#B45309' : '#475569'
                               )}
                             </td>
                             <td style={{ padding: '0.65rem 0.9rem', color: '#6D28D9', fontWeight: 700, fontSize: '0.78rem' }}>

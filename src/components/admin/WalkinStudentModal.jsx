@@ -30,7 +30,7 @@ export const WalkinStudentModal = ({
     hasLocker: false,
     lockerNumber: '',
     shift: 'MORNING', // MORNING, AFTERNOON, EVENING, FULL_DAY, CUSTOM
-    arrivalTime: '07:00 AM - 12:00 PM',
+    arrivalTime: '06:00 AM - 12:00 PM',
     customArrivalTime: '',
     startDate: today,
     endDate: calculateInitialEndDate(today, 'MONTHLY'),
@@ -42,30 +42,32 @@ export const WalkinStudentModal = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Helper to compute end date based on pass type
+  // Helper to compute end date based on pass type (timezone-safe)
   function calculateInitialEndDate(startStr, passType) {
     if (!startStr) return '';
-    const date = new Date(startStr);
-    if (isNaN(date.getTime())) return startStr;
+    const parts = startStr.split('-').map(Number);
+    if (parts.length !== 3 || isNaN(parts[0])) return startStr;
+    const date = new Date(parts[0], parts[1] - 1, parts[2]);
     
     if (passType === 'DAILY') {
       return startStr;
     } else if (passType === 'WEEKLY') {
       date.setDate(date.getDate() + 7);
-      return date.toISOString().split('T')[0];
     } else if (passType === 'MONTHLY') {
       date.setDate(date.getDate() + 30);
-      return date.toISOString().split('T')[0];
     }
-    return startStr;
+    const yr = date.getFullYear();
+    const mo = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${day}`;
   }
 
-  // Shift timing presets
+  // Shift timing presets (Operating hours: 6:00 AM - 9:00 PM)
   const SHIFT_OPTIONS = [
-    { id: 'MORNING', label: 'Morning Shift', time: '07:00 AM - 12:00 PM', desc: 'Early Bird Scholar' },
+    { id: 'MORNING', label: 'Morning Shift', time: '06:00 AM - 12:00 PM', desc: 'Early Bird Scholar' },
     { id: 'AFTERNOON', label: 'Afternoon Shift', time: '12:00 PM - 05:00 PM', desc: 'Mid-Day Focus' },
-    { id: 'EVENING', label: 'Evening Shift', time: '05:00 PM - 10:00 PM', desc: 'After-Work / Late Prep' },
-    { id: 'FULL_DAY', label: 'Full Day Access', time: '07:00 AM - 10:00 PM', desc: 'All Day Dedicated Desk' },
+    { id: 'EVENING', label: 'Evening Shift', time: '05:00 PM - 09:00 PM', desc: 'After-Work / Late Prep' },
+    { id: 'FULL_DAY', label: 'Full Day Access', time: '06:00 AM - 09:00 PM', desc: 'All Day Dedicated Desk' },
     { id: 'CUSTOM', label: 'Custom Hours', time: 'Custom Timing', desc: 'Specific Timing Window' }
   ];
 
@@ -129,7 +131,7 @@ export const WalkinStudentModal = ({
     setFormData(prev => ({
       ...prev,
       shift: shiftId,
-      arrivalTime: found ? found.time : '07:00 AM - 10:00 PM'
+      arrivalTime: found ? found.time : '06:00 AM - 09:00 PM'
     }));
   };
 

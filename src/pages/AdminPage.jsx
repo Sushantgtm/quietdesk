@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBooking } from '../context/BookingContext';
@@ -8,11 +8,12 @@ import {
   UserCheck, AlertCircle, Clock, TrendingUp, CreditCard, ChevronDown, Check, X,
   Users, UserPlus, Package, Edit, Edit3, Plus, Eye, Trash2, Lock, Tag, XCircle, Phone, Mail, User,
   PlusCircle, Sparkles, Layers, Sliders, MapPin, FileText, CheckCircle, Printer, Copy, AlertTriangle,
-  Compass, DoorOpen, Bookmark, RotateCcw, FolderArchive
+  Compass, DoorOpen, Bookmark, RotateCcw, FolderArchive, Download
 } from 'lucide-react';
 import { seedAllCollectionsToFirestore } from '../services/firebase/seedService';
 import { deleteUser as deleteUserFromFirestore, purgeAllUsersFromFirestore } from '../services/firebase/userService';
 import { deleteBooking as deleteBookingFromFirestore, purgeAllBookingsFromFirestore } from '../services/firebase/bookingService';
+import { RegisterNewStudentModal } from '../components/admin/RegisterNewStudentModal';
 import { WalkinStudentModal } from '../components/admin/WalkinStudentModal';
 import { RegistrationReceiptModal } from '../components/admin/RegistrationReceiptModal';
 import { StudyRoomFloorPlan } from '../components/admin/StudyRoomFloorPlan';
@@ -20,19 +21,20 @@ import { CabinStudentSelectModal } from '../components/admin/CabinStudentSelectM
 import { LockerManageModal } from '../components/admin/LockerManageModal';
 import { StudentProfileModal } from '../components/admin/StudentProfileModal';
 import { ReservationConfirmModal } from '../components/admin/ReservationConfirmModal';
+import { exportToExcel } from '../utils/exportExcel';
 
 export const AdminPage = () => {
   const { isAuthenticated, logout, admin } = useAuth();
   const { 
     seats, lockers, bookings, users, plans, zones, amenities, faqs,
     changeSeatStatus, changeBookingStatus, changePaymentStatus, 
-    loadingBookings, loadingUsers, confirmBooking,
+    loadingBookings, loadingUsers, confirmBooking, approveBooking, rejectBooking, createAdminBooking,
     createUser, updateUser, createPlan, updatePlan, deletePlan, 
     createBooking, updateBookingDetails, createSeat, updateSeatDetails, deleteSeat,
     createZone, updateZoneDetails, deleteZone, resetAndSeedZones, findOrCreateStudent,
     assignLocker, releaseLocker, updateLockerStatus, createLocker,
     createAmenity, updateAmenity, deleteAmenity,
-    createFaq, updateFaq, deleteFaq
+    createFaq, updateFaq, deleteFaq, reconcileSeats
   } = useBooking();
   const navigate = useNavigate();
 
@@ -52,7 +54,17 @@ export const AdminPage = () => {
   const [userDueFilter, setUserDueFilter] = useState('ALL'); // ALL | HAS_DUE | NO_DUE
   const [financeStatusFilter, setFinanceStatusFilter] = useState('ALL');
   const [bookingStatusFilter, setBookingStatusFilter] = useState('ALL');
-  const [bookingChannelFilter, setBookingChannelFilter] = useState('WEBSITE_ONLY');
+  const [bookingChannelFilter, setBookingChannelFilter] = useState('ALL');
+
+  // Unified Register Student Modal State
+  const [showRegisterStudentModal, setShowRegisterStudentModal] = useState(false);
+  const [preselectedBookingForRegister, setPreselectedBookingForRegister] = useState(null);
+  const [preselectedSeatForRegister, setPreselectedSeatForRegister] = useState(null);
+
+  // Finance Date Filters
+  const [financeDateFilter, setFinanceDateFilter] = useState('ALL'); // ALL, TODAY, THIS_WEEK, THIS_MONTH, LAST_MONTH, CUSTOM
+  const [financeCustomStartDate, setFinanceCustomStartDate] = useState('');
+  const [financeCustomEndDate, setFinanceCustomEndDate] = useState('');
 
   // Modal States
   const [selectedUserForProfile, setSelectedUserForProfile] = useState(null);
@@ -73,10 +85,24 @@ export const AdminPage = () => {
   const [showReservationConfirmModal, setShowReservationConfirmModal] = useState(false);
   const [selectedBookingForConfirmation, setSelectedBookingForConfirmation] = useState(null);
 
+  const calculateExpectedAdminEndDate = (startStr, passType) => {
+    if (!startStr) return '';
+    const parts = startStr.split('-').map(Number);
+    if (parts.length !== 3 || isNaN(parts[0])) return startStr;
+    const date = new Date(parts[0], parts[1] - 1, parts[2]);
+    const pt = (passType || 'DAILY').toUpperCase();
+    if (pt === 'WEEKLY') date.setDate(date.getDate() + 7);
+    else if (pt === 'MONTHLY') date.setDate(date.getDate() + 30);
+    const yr = date.getFullYear();
+    const mo = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${day}`;
+  };
+
   const [showReservationModal, setShowReservationModal] = useState(false);
   const [reservationForm, setReservationForm] = useState({
     userId: '', userName: '', userEmail: '', userPhone: '',
-    seatId: '', seatNumber: '', shift: 'FULL_DAY', bookingTime: '07:00 AM - 10:00 PM',
+    seatId: '', seatNumber: '', shift: 'FULL_DAY', bookingTime: '06:00 AM - 09:00 PM',
     passType: 'DAILY', startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0], totalAmount: 350,
     advanceAmount: 0, amountPaid: 0, pendingAmount: 350, paymentStatus: 'PAID', hasLocker: false
@@ -246,15 +272,15 @@ export const AdminPage = () => {
     const result = await seedAllCollectionsToFirestore();
     setIsSeeding(false);
     if (result.success) {
-      setSeedingStatus(`✅ Successfully seeded mock data to Firebase Firestore! (Seats: ${result.summary.seats}, Bookings: ${result.summary.bookings}, Plans: ${result.summary.plans}, Amenities: ${result.summary.amenities})`);
+      setSeedingStatus(`Ã¢Å“â€¦ Successfully seeded mock data to Firebase Firestore! (Seats: ${result.summary.seats}, Bookings: ${result.summary.bookings}, Plans: ${result.summary.plans}, Amenities: ${result.summary.amenities})`);
       setTimeout(() => setSeedingStatus(null), 6000);
     } else {
-      setSeedingStatus(`❌ Seeding failed: ${result.error}`);
+      setSeedingStatus(`Ã¢ÂÅ’ Seeding failed: ${result.error}`);
     }
   };
 
   const handleResetAndStartFresh = async () => {
-    if (!window.confirm('⚠️ Are you sure you want to remove current student bookings and reset to a clean database? This will clear stale records and initialize pristine state.')) return;
+    if (!window.confirm('Ã¢Å¡Â Ã¯Â¸Â Are you sure you want to remove current student bookings and reset to a clean database? This will clear stale records and initialize pristine state.')) return;
     setIsSeeding(true);
     try {
       ['v1', 'v2', 'v3'].forEach(v => {
@@ -268,16 +294,16 @@ export const AdminPage = () => {
       
       const result = await seedAllCollectionsToFirestore();
       if (result.success) {
-        setSeedingStatus('✅ Successfully reset and initialized clean database! Reloading workspace...');
+        setSeedingStatus('Ã¢Å“â€¦ Successfully reset and initialized clean database! Reloading workspace...');
         setTimeout(() => {
           window.location.reload();
         }, 1200);
       } else {
-        setSeedingStatus(`❌ Reset failed: ${result.error}`);
+        setSeedingStatus(`Ã¢ÂÅ’ Reset failed: ${result.error}`);
         setIsSeeding(false);
       }
     } catch (err) {
-      setSeedingStatus(`❌ Error during reset: ${err.message}`);
+      setSeedingStatus(`Ã¢ÂÅ’ Error during reset: ${err.message}`);
       setIsSeeding(false);
     }
   };
@@ -310,16 +336,13 @@ export const AdminPage = () => {
   const handleWalkinStudentRegistration = async ({ studentData, bookingData, seatIdToOccupy }) => {
     try {
       const { user: student } = await findOrCreateStudent(studentData);
-      const booking = await createBooking({
+      const booking = await createAdminBooking({
         ...bookingData,
         userId: student.id,
         userCode: student.userCode,
-        status: 'CONFIRMED'
+        status: 'CONFIRMED',
+        seatId: seatIdToOccupy || bookingData.seatId
       });
-
-      if (seatIdToOccupy) {
-        await changeSeatStatus(seatIdToOccupy, 'OCCUPIED');
-      }
 
       if (studentData.hasLocker && studentData.lockerNumber) {
         const matchingLocker = lockers.find(l => l.lockerNumber === studentData.lockerNumber || l.id === studentData.lockerNumber);
@@ -403,15 +426,15 @@ export const AdminPage = () => {
       const memberEmail = (reservationForm.userEmail || '').trim();
 
       if (!memberName || memberName.toLowerCase() === 'scholar') {
-        alert('⚠️ Please enter a valid Member Name before creating a reservation or booking.');
+        alert('Ã¢Å¡Â Ã¯Â¸Â Please enter a valid Member Name before creating a reservation or booking.');
         return;
       }
       if (!memberPhone && !memberEmail) {
-        alert('⚠️ Please provide at least a Phone Number or Email Address for the member.');
+        alert('Ã¢Å¡Â Ã¯Â¸Â Please provide at least a Phone Number or Email Address for the member.');
         return;
       }
       if (!reservationForm.seatId) {
-        alert('⚠️ Please choose an available station / desk.');
+        alert('Ã¢Å¡Â Ã¯Â¸Â Please choose an available station / desk.');
         return;
       }
 
@@ -452,14 +475,14 @@ export const AdminPage = () => {
       });
 
       if (dupBooking) {
-        alert(`⚠️ Scholar "${dupBooking.userName || reservationForm.userName}" already holds an active desk (Desk ${dupBooking.seatNumber}, valid until ${dupBooking.endDate || 'active'}). A student cannot hold multiple active desks simultaneously.`);
+        alert(`Ã¢Å¡Â Ã¯Â¸Â Scholar "${dupBooking.userName || reservationForm.userName}" already holds an active desk (Desk ${dupBooking.seatNumber}, valid until ${dupBooking.endDate || 'active'}). A student cannot hold multiple active desks simultaneously.`);
         return;
       }
 
       const bookingStatus = mode === 'BOOK' ? 'CONFIRMED' : (mode === 'RESERVE' ? 'RESERVED' : (reservationForm.status || 'CONFIRMED'));
       const seatStatus = bookingStatus === 'CONFIRMED' ? 'OCCUPIED' : 'RESERVED';
 
-      await createBooking({
+      await createAdminBooking({
         ...reservationForm,
         userName: memberName,
         userPhone: memberPhone,
@@ -480,12 +503,12 @@ export const AdminPage = () => {
       setShowReservationModal(false);
       setReservationForm({
         userId: '', userName: '', userEmail: '', userPhone: '',
-        seatId: '', seatNumber: '', shift: 'FULL_DAY', bookingTime: '07:00 AM - 10:00 PM',
+        seatId: '', seatNumber: '', shift: 'FULL_DAY', bookingTime: '06:00 AM - 09:00 PM',
         passType: 'DAILY', startDate: new Date().toISOString().split('T')[0],
         endDate: new Date().toISOString().split('T')[0], totalAmount: 350,
         advanceAmount: 0, amountPaid: 0, pendingAmount: 350, paymentStatus: 'PAID', hasLocker: false
       });
-      alert(bookingStatus === 'CONFIRMED' ? '✅ Cabin successfully booked and occupied!' : '✅ Reservation successfully created and placed on hold!');
+      alert(bookingStatus === 'CONFIRMED' ? 'Ã¢Å“â€¦ Cabin successfully booked and occupied!' : 'Ã¢Å“â€¦ Reservation successfully created and placed on hold!');
     } catch (err) {
       console.error('Error creating booking/reservation:', err);
       alert('Error: ' + err.message);
@@ -507,13 +530,14 @@ export const AdminPage = () => {
         deletedAt: new Date().toISOString()
       });
 
-      // 2. Free any active bookings / seats / lockers
-      const activeBk = (bookings || []).find(b =>
+      // 2. Find ALL active bookings for this student and release them
+      const activeBookings = (bookings || []).filter(b =>
         (b.userId === user.id || (b.userPhone && user.phone && b.userPhone.replace(/\D/g, '') === user.phone.replace(/\D/g, ''))) &&
-        !['CANCELLED', 'COMPLETED'].includes(b.status)
+        !['CANCELLED', 'COMPLETED', 'REJECTED'].includes(b.status)
       );
-      if (activeBk) {
-        await changeBookingStatus(activeBk.id, activeBk.seatId, 'COMPLETED');
+
+      for (const activeBk of activeBookings) {
+        await changeBookingStatus(activeBk.id, activeBk.seatId, 'CANCELLED');
         if (activeBk.seatId) {
           await changeSeatStatus(activeBk.seatId, 'AVAILABLE');
         }
@@ -522,7 +546,13 @@ export const AdminPage = () => {
           if (matchingLocker) await releaseLocker(matchingLocker.id);
         }
       }
-      alert(`✅ User "${name}" has been moved to Deleted Files.`);
+
+      // 3. If user has a directly assigned seatId field, free it too
+      if (user.seatId) {
+        await changeSeatStatus(user.seatId, 'AVAILABLE');
+      }
+
+      alert(`Ã¢Å“â€¦ User "${name}" has been moved to Deleted Files.`);
     } catch (err) {
       console.error('Error deleting user:', err);
       alert('Failed to delete user: ' + err.message);
@@ -537,7 +567,7 @@ export const AdminPage = () => {
         membershipStatus: 'INACTIVE',
         deletedAt: null
       });
-      alert(`✅ User "${user.fullName || user.name}" has been restored to the active database.`);
+      alert(`Ã¢Å“â€¦ User "${user.fullName || user.name}" has been restored to the active database.`);
     } catch (err) {
       console.error('Error restoring user:', err);
       alert('Failed to restore user: ' + err.message);
@@ -545,10 +575,10 @@ export const AdminPage = () => {
   };
 
   const handlePermanentDeleteUser = async (user) => {
-    if (!window.confirm(`⚠️ PERMANENT DELETE: Are you sure you want to permanently erase "${user.fullName || user.name}" from Firestore? This CANNOT be undone.`)) return;
+    if (!window.confirm(`Ã¢Å¡Â Ã¯Â¸Â PERMANENT DELETE: Are you sure you want to permanently erase "${user.fullName || user.name}" from Firestore? This CANNOT be undone.`)) return;
     try {
       await deleteUserFromFirestore(user.id);
-      alert(`✅ User permanently erased.`);
+      alert(`Ã¢Å“â€¦ User permanently erased.`);
     } catch (err) {
       console.error('Error permanently erasing user:', err);
       alert('Failed to erase user: ' + err.message);
@@ -599,6 +629,16 @@ export const AdminPage = () => {
     } catch (err) {
       console.error('Error updating booking:', err);
       alert('Failed to update booking: ' + err.message);
+    }
+  };
+
+  const handleRejectBooking = async (booking) => {
+    if (!window.confirm(`Are you sure you want to reject reservation ${booking.bookingCode} for ${booking.userName}? Desk ${booking.seatNumber} will remain AVAILABLE.`)) return;
+    try {
+      await rejectBooking(booking.id);
+      alert(`Reservation ${booking.bookingCode} has been REJECTED. The desk remains Available.`);
+    } catch (err) {
+      alert(`Failed to reject: ${err.message}`);
     }
   };
 
@@ -671,7 +711,7 @@ export const AdminPage = () => {
 
       setShowRecordPaymentModal(false);
       setSelectedBookingForPayment(null);
-      alert(`✅ Successfully recorded payment of NPR ${addAmt.toLocaleString()} via ${paymentModalForm.paymentMethod}!\nRemaining Left Balance: ${newPending === 0 ? 'Nil (Fully Settled)' : 'NPR ' + newPending.toLocaleString()}`);
+      alert(`Ã¢Å“â€¦ Successfully recorded payment of NPR ${addAmt.toLocaleString()} via ${paymentModalForm.paymentMethod}!\nRemaining Left Balance: ${newPending === 0 ? 'Nil (Fully Settled)' : 'NPR ' + newPending.toLocaleString()}`);
     } catch (err) {
       console.error('Error recording payment:', err);
       alert('Failed to record payment: ' + err.message);
@@ -691,7 +731,7 @@ export const AdminPage = () => {
         } else {
           await changeSeatStatus(seatObj.id, 'AVAILABLE');
         }
-        alert(`✓ Desk ${seatObj.seatNumber} set to AVAILABLE and booking completed.`);
+        alert(`Ã¢Å“â€œ Desk ${seatObj.seatNumber} set to AVAILABLE and booking completed.`);
       } catch (err) {
         console.error('Error quick completing booking:', err);
         alert('Failed to complete booking: ' + err.message);
@@ -745,10 +785,10 @@ export const AdminPage = () => {
 
       if (editingSeat) {
         await updateSeatDetails(editingSeat.id, payload);
-        alert(`✓ Station ${seatForm.seatNumber} details updated successfully!`);
+        alert(`Ã¢Å“â€œ Station ${seatForm.seatNumber} details updated successfully!`);
       } else {
         await createSeat(payload);
-        alert(`✓ New station ${seatForm.seatNumber} added successfully!`);
+        alert(`Ã¢Å“â€œ New station ${seatForm.seatNumber} added successfully!`);
       }
       setShowSeatModal(false);
       setEditingSeat(null);
@@ -787,7 +827,7 @@ export const AdminPage = () => {
         hasLocker: singleStationForm.hasLocker,
         notes: singleStationForm.notes
       });
-      alert(`✅ Station ${singleStationForm.seatNumber} successfully created and published!`);
+      alert(`Ã¢Å“â€¦ Station ${singleStationForm.seatNumber} successfully created and published!`);
       // Auto-increment code suggestion for fast sequential creation
       const numMatch = singleStationForm.seatNumber.match(/^([A-Za-z\-]+)(\d+)$/);
       if (numMatch) {
@@ -830,7 +870,7 @@ export const AdminPage = () => {
         });
         createdCount++;
       }
-      alert(`✅ Successfully batch-created ${createdCount} new study stations!`);
+      alert(`Ã¢Å“â€¦ Successfully batch-created ${createdCount} new study stations!`);
     } catch (err) {
       console.error('Error batch creating stations:', err);
       alert('Failed during batch station creation: ' + err.message);
@@ -1017,9 +1057,9 @@ export const AdminPage = () => {
   const availableLockers = totalLockers - bookedLockers;
 
   // --- Booking Metrics ---
-  const pendingConfirmations = bookings.filter(b => b.status === 'PENDING_CONFIRMATION');
+  const pendingConfirmations = bookings.filter(b => b.status === 'PENDING' || b.status === 'PENDING_CONFIRMATION');
   const activeCheckIns = bookings.filter(b => b.status === 'CHECKED_IN');
-  const confirmedBookings = bookings.filter(b => b.status === 'CONFIRMED');
+  const confirmedBookings = bookings.filter(b => b.status === 'CONFIRMED' || b.status === 'APPROVED');
 
   // --- Financial Metrics ---
   const activeBookingsList = bookings.filter(b => b.status !== 'CANCELLED');
@@ -1071,17 +1111,84 @@ export const AdminPage = () => {
     const matchesQuery = (b.bookingCode && b.bookingCode.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (b.userName && b.userName.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (b.seatNumber && b.seatNumber.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesStatus = bookingStatusFilter === 'ALL' || b.status === bookingStatusFilter;
+    const matchesStatus = bookingStatusFilter === 'ALL' || b.status === bookingStatusFilter ||
+      (bookingStatusFilter === 'PENDING' && b.status === 'PENDING_CONFIRMATION') ||
+      (bookingStatusFilter === 'PENDING_CONFIRMATION' && b.status === 'PENDING');
     return matchesQuery && matchesStatus;
   });
 
-  const filteredFinanceBookings = bookings.filter(b => {
-    const matchesQuery = (b.bookingCode && b.bookingCode.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (b.userName && b.userName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (b.seatNumber && b.seatNumber.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesPayment = financeStatusFilter === 'ALL' || b.paymentStatus === financeStatusFilter;
-    return matchesQuery && matchesPayment;
-  });
+  const filteredFinanceBookings = useMemo(() => {
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+
+    let startLimit = null;
+    let endLimit = null;
+
+    if (financeDateFilter === 'TODAY') {
+      startLimit = todayStr;
+      endLimit = todayStr;
+    } else if (financeDateFilter === 'THIS_WEEK') {
+      const d = new Date(now);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(d.setDate(diff));
+      startLimit = monday.toISOString().split('T')[0];
+      endLimit = todayStr;
+    } else if (financeDateFilter === 'THIS_MONTH') {
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      startLimit = firstDay.toISOString().split('T')[0];
+      endLimit = todayStr;
+    } else if (financeDateFilter === 'LAST_MONTH') {
+      const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+      startLimit = firstDayLastMonth.toISOString().split('T')[0];
+      endLimit = lastDayLastMonth.toISOString().split('T')[0];
+    } else if (financeDateFilter === 'CUSTOM') {
+      if (financeCustomStartDate) startLimit = financeCustomStartDate;
+      if (financeCustomEndDate) endLimit = financeCustomEndDate;
+    }
+
+    return bookings.filter(b => {
+      const matchesQuery = (b.bookingCode && b.bookingCode.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (b.userName && b.userName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (b.seatNumber && b.seatNumber.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchesPayment = financeStatusFilter === 'ALL' || b.paymentStatus === financeStatusFilter;
+      if (!matchesQuery || !matchesPayment) return false;
+
+      if (startLimit || endLimit) {
+        const bDate = b.createdAt ? b.createdAt.split('T')[0] : (b.startDate || '');
+        if (startLimit && bDate < startLimit) return false;
+        if (endLimit && bDate > endLimit) return false;
+      }
+      return true;
+    });
+  }, [bookings, searchQuery, financeStatusFilter, financeDateFilter, financeCustomStartDate, financeCustomEndDate]);
+
+  const handleExportPaymentsExcel = () => {
+    if (!filteredFinanceBookings.length) {
+      alert('No payment records to export in the selected filter.');
+      return;
+    }
+    const rows = filteredFinanceBookings.map(b => {
+      const total = Number(b.totalAmount || 0);
+      const paid = b.paymentStatus === 'PAID' ? total : Number(b.amountPaid || 0);
+      const due = Math.max(0, total - paid);
+      return {
+        'Student ID': b.userCode || b.userId || 'N/A',
+        'Student Name': b.userName || '',
+        'Contact': b.userPhone || '',
+        'Package': b.passType || 'DAILY',
+        'Amount': total,
+        'Amount Paid': paid,
+        'Balance Due': due,
+        'Payment Method': b.paymentMethod || 'CASH',
+        'Payment Date': b.createdAt ? b.createdAt.split('T')[0] : (b.startDate || ''),
+        'Booking/Receipt ID': b.bookingCode || b.id,
+        'Status': b.paymentStatus || 'PENDING'
+      };
+    });
+    exportToExcel(rows, `QuietDesk_Payments_${financeDateFilter}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
 
   // --- Unified User Registry (Includes Admin registered users + Website booked students, excluding deleted files) ---
   const allUnifiedUsers = useMemo(() => {
@@ -1183,7 +1290,7 @@ export const AdminPage = () => {
     .filter(b => b.daysLeft < 0 || b.status === 'COMPLETED')
     .sort((a, b) => b.daysLeft - a.daysLeft); // most recently expired first
 
-  // Active scholars table: expiring ≤3 days pinned first, then by soonest
+  // Active scholars table: expiring Ã¢â€°Â¤3 days pinned first, then by soonest
   const activeScholarsTable = [
     ...sessionExpiryList.filter(b => b.daysLeft <= 3),
     ...sessionExpiryList.filter(b => b.daysLeft > 3).sort((a, b) => {
@@ -1295,7 +1402,11 @@ export const AdminPage = () => {
         </div>
 
         <button
-          onClick={() => setShowWalkinStudentModal(true)}
+          onClick={() => {
+            setPreselectedBookingForRegister(null);
+            setPreselectedSeatForRegister(null);
+            setShowRegisterStudentModal(true);
+          }}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -1310,7 +1421,7 @@ export const AdminPage = () => {
             cursor: 'pointer'
           }}
         >
-          <UserPlus size={14} /> Walk-in
+          <UserPlus size={14} /> Register Student
         </button>
       </header>
 
@@ -1368,7 +1479,7 @@ export const AdminPage = () => {
                 </h1>
                 <div style={{ fontSize: '0.75rem', color: '#94A3B8', marginTop: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block', flexShrink: 0 }}></span>
-                  <span style={{ whiteSpace: 'nowrap' }}>Lazimpat • Online</span>
+                  <span style={{ whiteSpace: 'nowrap' }}>Lazimpat Ã¢â‚¬Â¢ Online</span>
                 </div>
               </div>
             ) : (
@@ -1567,70 +1678,35 @@ export const AdminPage = () => {
               {activeTab === 'SYSTEM' && 'System Parameters & Maintenance'}
             </h2>
             <div style={{ fontSize: '0.85rem', color: '#64748B', marginTop: '0.2rem' }}>
-              Real-time synchronization with Firestore • Kathmandu, Nepal
+              Real-time synchronization with Firestore Ã¢â‚¬Â¢ Kathmandu, Nepal
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
             {activeTab !== 'DESKS' && (
-              <>
-                <button
-                  onClick={() => setShowWalkinStudentModal(true)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    backgroundColor: '#059669',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    padding: '0.55rem 1rem',
-                    borderRadius: '8px',
-                    fontSize: '0.85rem',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  <CheckCircle2 size={16} /> 🟢 Book Cabin (Walk-in)
-                </button>
-
-                <button
-                  onClick={() => setShowReservationModal(true)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    backgroundColor: '#D97706',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    padding: '0.55rem 1rem',
-                    borderRadius: '8px',
-                    fontSize: '0.85rem',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  <Plus size={16} /> 🟡 Make Reservation
-                </button>
-
-                <button
-                  onClick={() => setShowRegisterUserModal(true)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    backgroundColor: '#0F172A',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    padding: '0.55rem 1rem',
-                    borderRadius: '8px',
-                    fontSize: '0.85rem',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  <UserPlus size={16} /> + Register User
-                </button>
-              </>
+              <button
+                onClick={() => {
+                  setPreselectedBookingForRegister(null);
+                  setPreselectedSeatForRegister(null);
+                  setShowRegisterStudentModal(true);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.45rem',
+                  backgroundColor: '#059669',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  padding: '0.65rem 1.4rem',
+                  borderRadius: '8px',
+                  fontSize: '0.9rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 6px -1px rgba(5, 150, 105, 0.25)'
+                }}
+              >
+                <UserPlus size={18} /> Register Student
+              </button>
             )}
 
             <span style={{ fontSize: '0.8rem', backgroundColor: '#E2E8F0', color: '#334155', padding: '0.4rem 0.85rem', borderRadius: '20px', fontWeight: 700 }}>
@@ -1644,31 +1720,31 @@ export const AdminPage = () => {
         {activeTab === 'OVERVIEW' && (
           <div>
 
-            {/* ── KPI Cards Row (5 cards) ── */}
+            {/* Ã¢â€â‚¬Ã¢â€â‚¬ KPI Cards Row (5 cards) Ã¢â€â‚¬Ã¢â€â‚¬ */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
 
               {/* 1. Available Stations */}
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>🟢 Available Stations</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Ã°Å¸Å¸Â¢ Available Stations</div>
                 <div style={{ fontSize: '1.9rem', fontWeight: 800, color: '#059669', margin: '0.25rem 0 0.1rem' }}>{availableCount}<span style={{ fontSize: '1rem', color: '#94A3B8', fontWeight: 600 }}> / {totalSeats}</span></div>
                 <div style={{ fontSize: '0.75rem', color: '#475569' }}>{bookedSeats} occupied or reserved</div>
               </div>
 
-              {/* 2. Occupancy Rate — fixed math */}
+              {/* 2. Occupancy Rate Ã¢â‚¬â€ fixed math */}
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>📊 Occupancy Rate</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Ã°Å¸â€œÅ  Occupancy Rate</div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.35rem', margin: '0.25rem 0 0.1rem' }}>
                   <div style={{ fontSize: '1.9rem', fontWeight: 800, color: '#D97706' }}>{occupancyRateExact}%</div>
                 </div>
                 <div style={{ height: '4px', borderRadius: '4px', backgroundColor: '#F1F5F9', overflow: 'hidden', marginBottom: '0.3rem' }}>
                   <div style={{ height: '100%', width: `${occupancyRate}%`, backgroundColor: occupancyRate > 80 ? '#DC2626' : occupancyRate > 50 ? '#D97706' : '#059669', borderRadius: '4px', transition: 'width 0.4s ease' }} />
                 </div>
-                <div style={{ fontSize: '0.72rem', color: '#475569' }}>{occupiedCount} occupied · {reservedCount} reserved · {totalSeats} total</div>
+                <div style={{ fontSize: '0.72rem', color: '#475569' }}>{occupiedCount} occupied Ã‚Â· {reservedCount} reserved Ã‚Â· {totalSeats} total</div>
               </div>
 
-              {/* 3. Locker Utilization — NEW */}
+              {/* 3. Locker Utilization Ã¢â‚¬â€ NEW */}
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>🔑 Locker Utilization</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Ã°Å¸â€â€˜ Locker Utilization</div>
                 <div style={{ fontSize: '1.9rem', fontWeight: 800, color: availableLockers === 0 ? '#DC2626' : '#1D4ED8', margin: '0.25rem 0 0.1rem' }}>
                   {bookedLockers}<span style={{ fontSize: '1rem', color: '#94A3B8', fontWeight: 600 }}> / {totalLockers}</span>
                 </div>
@@ -1676,20 +1752,20 @@ export const AdminPage = () => {
                   <div style={{ height: '100%', width: totalLockers > 0 ? `${Math.round((bookedLockers / totalLockers) * 100)}%` : '0%', backgroundColor: availableLockers === 0 ? '#DC2626' : availableLockers <= 3 ? '#D97706' : '#2563EB', borderRadius: '4px' }} />
                 </div>
                 <div style={{ fontSize: '0.72rem', color: availableLockers === 0 ? '#DC2626' : '#059669', fontWeight: 600 }}>
-                  {availableLockers === 0 ? '🔴 All lockers assigned' : `${availableLockers} key locker${availableLockers !== 1 ? 's' : ''} free`}
+                  {availableLockers === 0 ? 'Ã°Å¸â€Â´ All lockers assigned' : `${availableLockers} key locker${availableLockers !== 1 ? 's' : ''} free`}
                 </div>
               </div>
 
               {/* 4. Pending Confirmations */}
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>⏳ Pending Confirmations</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Ã¢ÂÂ³ Pending Confirmations</div>
                 <div style={{ fontSize: '1.9rem', fontWeight: 800, color: pendingConfirmations.length > 0 ? '#2563EB' : '#94A3B8', margin: '0.25rem 0 0.1rem' }}>{pendingConfirmations.length}</div>
                 <div style={{ fontSize: '0.72rem', color: '#475569' }}>Reservations awaiting admin confirm</div>
               </div>
 
               {/* 5. Total Revenue */}
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>💰 Total Revenue</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Ã°Å¸â€™Â° Total Revenue</div>
                 <div style={{ fontSize: '1.55rem', fontWeight: 800, color: '#0F172A', margin: '0.25rem 0 0.1rem' }}>NPR {totalGrossRevenue.toLocaleString()}</div>
                 <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 600 }}>NPR {collectedPaidRevenue.toLocaleString()} collected</div>
               </div>
@@ -1734,12 +1810,12 @@ export const AdminPage = () => {
                     cursor: 'pointer'
                   }}
                 >
-                  Review Pending Requests →
+                  Review Pending Requests Ã¢â€ â€™
                 </button>
               </div>
             )}
 
-            {/* ── PROMOTED: Sessions Expiring Soon (full-width card) ── */}
+            {/* Ã¢â€â‚¬Ã¢â€â‚¬ PROMOTED: Sessions Expiring Soon (full-width card) Ã¢â€â‚¬Ã¢â€â‚¬ */}
             {sessionExpiryList.filter(b => b.daysLeft <= 7).length > 0 && (
               <div style={{
                 backgroundColor: '#FFFFFF',
@@ -1751,7 +1827,7 @@ export const AdminPage = () => {
               }}>
                 <div style={{ padding: '1rem 1.5rem', background: 'linear-gradient(90deg,#FEF2F2,#FFF7F7)', borderBottom: '1px solid #FECACA', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <span style={{ fontSize: '1.2rem' }}>⏰</span>
+                    <span style={{ fontSize: '1.2rem' }}>Ã¢ÂÂ°</span>
                     <div>
                       <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#B91C1C' }}>Sessions Expiring Soon</div>
                       <div style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: '0.05rem' }}>{sessionExpiryList.filter(b => b.daysLeft <= 7).length} scholar{sessionExpiryList.filter(b => b.daysLeft <= 7).length !== 1 ? 's' : ''} need attention</div>
@@ -1761,7 +1837,7 @@ export const AdminPage = () => {
                     onClick={() => setShowSessionExpiryPopup(true)}
                     style={{ padding: '0.3rem 0.8rem', borderRadius: '6px', border: 'none', backgroundColor: '#0F172A', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
                   >
-                    View All →
+                    View All Ã¢â€ â€™
                   </button>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 0, padding: '0.25rem 0' }}>
@@ -1781,11 +1857,11 @@ export const AdminPage = () => {
                             </div>
                             <div>
                               <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0F172A', lineHeight: 1.2 }}>{b.userName || 'Walk-in'}</div>
-                              <div style={{ fontSize: '0.65rem', color: '#94A3B8' }}>{b.passType} · Desk {b.seatNumber}</div>
+                              <div style={{ fontSize: '0.65rem', color: '#94A3B8' }}>{b.passType} Ã‚Â· Desk {b.seatNumber}</div>
                             </div>
                           </div>
                           <span style={{ fontSize: '0.7rem', fontWeight: 800, color: textColor, backgroundColor: bgBadge, padding: '0.15rem 0.5rem', borderRadius: '10px', whiteSpace: 'nowrap' }}>
-                            {isToday ? '⚠ Expires Today' : `${b.daysLeft}d left`}
+                            {isToday ? 'Ã¢Å¡Â  Expires Today' : `${b.daysLeft}d left`}
                           </span>
                         </div>
                         <div style={{ height: '4px', borderRadius: '4px', backgroundColor: '#F1F5F9', overflow: 'hidden' }}>
@@ -1807,9 +1883,9 @@ export const AdminPage = () => {
                 {/* Header */}
                 <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
                   <div>
-                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A' }}>👥 Scholar Register</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A' }}>Ã°Å¸â€˜Â¥ Scholar Register</div>
                     <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '0.1rem' }}>
-                      {activeScholarsTable.length} active · {pastScholarsList.length} past
+                      {activeScholarsTable.length} active Ã‚Â· {pastScholarsList.length} past
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -1834,7 +1910,7 @@ export const AdminPage = () => {
                     <button
                       onClick={() => setActiveTab('USERS')}
                       style={{ background: 'none', border: 'none', color: '#2563EB', fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                    >View All Users →</button>
+                    >View All Users Ã¢â€ â€™</button>
                   </div>
                 </div>
 
@@ -1862,10 +1938,10 @@ export const AdminPage = () => {
 
                           let statusBg = '#ECFDF5', statusColor = '#047857', statusLabel = `${b.daysLeft}d left`;
                           if (isPast) { statusBg = '#F1F5F9'; statusColor = '#64748B'; statusLabel = 'Expired'; }
-                          else if (b.daysLeft === 0) { statusBg = '#FEF2F2'; statusColor = '#B91C1C'; statusLabel = '⚠ Today'; }
-                          else if (isUrgent) { statusBg = '#FEF2F2'; statusColor = '#B91C1C'; statusLabel = `🔴 ${b.daysLeft}d left`; }
-                          else if (isWarning) { statusBg = '#FFFBEB'; statusColor = '#B45309'; statusLabel = `🟡 ${b.daysLeft}d left`; }
-                          else { statusLabel = `🟢 ${b.daysLeft}d left`; }
+                          else if (b.daysLeft === 0) { statusBg = '#FEF2F2'; statusColor = '#B91C1C'; statusLabel = 'Ã¢Å¡Â  Today'; }
+                          else if (isUrgent) { statusBg = '#FEF2F2'; statusColor = '#B91C1C'; statusLabel = `Ã°Å¸â€Â´ ${b.daysLeft}d left`; }
+                          else if (isWarning) { statusBg = '#FFFBEB'; statusColor = '#B45309'; statusLabel = `Ã°Å¸Å¸Â¡ ${b.daysLeft}d left`; }
+                          else { statusLabel = `Ã°Å¸Å¸Â¢ ${b.daysLeft}d left`; }
 
                           const rowBg = isPast ? '#FAFAFA' : (isUrgent ? '#FFF8F8' : isWarning ? '#FFFEF5' : '#FFFFFF');
                           const passColors = {
@@ -1874,7 +1950,7 @@ export const AdminPage = () => {
                             DAILY: { bg: '#F3F4F6', color: '#374151' }
                           };
                           const passStyle = passColors[b.passType] || passColors.DAILY;
-                          const lockerDisplay = b.hasLocker ? (b.lockerNumber || b.lockerLabel || '—') : '—';
+                          const lockerDisplay = b.hasLocker ? (b.lockerNumber || b.lockerLabel || 'Ã¢â‚¬â€') : 'Ã¢â‚¬â€';
 
                           return (
                             <tr
@@ -1893,20 +1969,20 @@ export const AdminPage = () => {
                                 </div>
                               </td>
                               <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center' }}>
-                                <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#0F172A' }}>{b.seatNumber || '—'}</span>
+                                <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#0F172A' }}>{b.seatNumber || 'Ã¢â‚¬â€'}</span>
                               </td>
                               <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center' }}>
                                 {b.hasLocker ? (
-                                  <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '0.15rem 0.45rem', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700 }}>🔑 {lockerDisplay}</span>
+                                  <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '0.15rem 0.45rem', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700 }}>Ã°Å¸â€â€˜ {lockerDisplay}</span>
                                 ) : (
-                                  <span style={{ color: '#CBD5E1', fontSize: '0.75rem' }}>—</span>
+                                  <span style={{ color: '#CBD5E1', fontSize: '0.75rem' }}>Ã¢â‚¬â€</span>
                                 )}
                               </td>
                               <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center' }}>
                                 <span style={{ backgroundColor: passStyle.bg, color: passStyle.color, padding: '0.15rem 0.45rem', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700 }}>{b.passType}</span>
                               </td>
                               <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center', fontSize: '0.75rem', color: '#475569', whiteSpace: 'nowrap' }}>
-                                {b.endDate || '—'}
+                                {b.endDate || 'Ã¢â‚¬â€'}
                               </td>
                               <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center' }}>
                                 <span style={{ backgroundColor: statusBg, color: statusColor, padding: '0.2rem 0.5rem', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 800, whiteSpace: 'nowrap' }}>
@@ -1925,7 +2001,7 @@ export const AdminPage = () => {
               {/* RIGHT COLUMN */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
-                {/* ── Card 1: Payment Pending ── */}
+                {/* Ã¢â€â‚¬Ã¢â€â‚¬ Card 1: Payment Pending Ã¢â€â‚¬Ã¢â€â‚¬ */}
                 <div
                   onClick={() => setActiveTab('FINANCE')}
                   style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #FDE68A', padding: '1.25rem', cursor: 'pointer', transition: 'box-shadow 0.15s ease' }}
@@ -1934,7 +2010,7 @@ export const AdminPage = () => {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.85rem' }}>
                     <div>
-                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#B45309', textTransform: 'uppercase', letterSpacing: '0.04em' }}>💰 Payment Pending</div>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#B45309', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Ã°Å¸â€™Â° Payment Pending</div>
                       <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#92400E', marginTop: '0.2rem' }}>
                         NPR {pendingReceivables.toLocaleString()}
                       </div>
@@ -1960,18 +2036,18 @@ export const AdminPage = () => {
                   </div>
 
                   <div style={{ marginTop: '0.85rem', fontSize: '0.75rem', color: '#94A3B8', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                    <CreditCard size={12} /> Click to open Finance & Revenue tab →
+                    <CreditCard size={12} /> Click to open Finance & Revenue tab Ã¢â€ â€™
                   </div>
                 </div>
 
-                {/* ── Card 2: Live Desk Grid with Legend ── */}
+                {/* Ã¢â€â‚¬Ã¢â€â‚¬ Card 2: Live Desk Grid with Legend Ã¢â€â‚¬Ã¢â€â‚¬ */}
                 <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '1.25rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                    <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0F172A' }}>📋 Live Desk Grid</div>
+                    <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0F172A' }}>Ã°Å¸â€œâ€¹ Live Desk Grid</div>
                     <button
                       onClick={() => setActiveTab('DESKS')}
                       style={{ background: 'none', border: 'none', color: '#2563EB', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
-                    >Full View →</button>
+                    >Full View Ã¢â€ â€™</button>
                   </div>
 
                   {/* Legend */}
@@ -2010,10 +2086,10 @@ export const AdminPage = () => {
 
                     {/* Summary row */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', paddingTop: '0.65rem', borderTop: '1px solid #F1F5F9', fontSize: '0.7rem', color: '#64748B', fontWeight: 600 }}>
-                    <span style={{ color: '#047857' }}>🟢 {availableCount} Free</span>
-                    <span style={{ color: '#B91C1C' }}>🔴 {occupiedCount} Busy</span>
-                    <span style={{ color: '#B45309' }}>🟡 {reservedCount} Reserved</span>
-                    <span style={{ color: '#6B7280' }}>⚫ {maintenanceCount} Maint</span>
+                    <span style={{ color: '#047857' }}>Ã°Å¸Å¸Â¢ {availableCount} Free</span>
+                    <span style={{ color: '#B91C1C' }}>Ã°Å¸â€Â´ {occupiedCount} Busy</span>
+                    <span style={{ color: '#B45309' }}>Ã°Å¸Å¸Â¡ {reservedCount} Reserved</span>
+                    <span style={{ color: '#6B7280' }}>Ã¢Å¡Â« {maintenanceCount} Maint</span>
                   </div>
                 </div>
 
@@ -2070,7 +2146,11 @@ export const AdminPage = () => {
                 </select>
 
                 <button
-                  onClick={() => setShowRegisterUserModal(true)}
+                  onClick={() => {
+                    setPreselectedBookingForRegister(null);
+                    setPreselectedSeatForRegister(null);
+                    setShowRegisterStudentModal(true);
+                  }}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -2085,15 +2165,15 @@ export const AdminPage = () => {
                     cursor: 'pointer'
                   }}
                 >
-                  <UserPlus size={16} /> Register New User
+                  <UserPlus size={16} /> Register New Student
                 </button>
                 <button
                   onClick={async () => {
-                    if (!window.confirm('⚠️ DANGER: This will PERMANENTLY DELETE all users and all bookings from Firestore and local storage. This cannot be undone. Are you absolutely sure?')) return;
+                    if (!window.confirm('Ã¢Å¡Â Ã¯Â¸Â DANGER: This will PERMANENTLY DELETE all users and all bookings from Firestore and local storage. This cannot be undone. Are you absolutely sure?')) return;
                     if (!window.confirm('Second confirmation: Delete ALL data? This will reset everything to empty.')) return;
                     await purgeAllUsersFromFirestore();
                     await purgeAllBookingsFromFirestore();
-                    alert('✅ All users and bookings have been purged. The system is now empty.');
+                    alert('Ã¢Å“â€¦ All users and bookings have been purged. The system is now empty.');
                   }}
                   title="Permanently delete all users and bookings from Firestore"
                   style={{
@@ -2275,15 +2355,9 @@ export const AdminPage = () => {
                             ) : (
                               <button
                                 onClick={() => {
-                                  setReservationForm(prev => ({
-                                    ...prev,
-                                    userId: user.id,
-                                    userName: user.fullName,
-                                    userEmail: user.email,
-                                    userPhone: user.phone,
-                                    passType: user.passType || 'DAILY'
-                                  }));
-                                  setShowReservationModal(true);
+                                  setPreselectedBookingForRegister(null);
+                                  setPreselectedSeatForRegister(null);
+                                  setShowRegisterStudentModal(true);
                                 }}
                                 style={{
                                   display: 'inline-flex',
@@ -2303,10 +2377,7 @@ export const AdminPage = () => {
                               </button>
                             )}
                             <button
-                              onClick={async () => {
-                                if (!window.confirm(`Delete "${user.fullName || user.id}" from the system? This cannot be undone.`)) return;
-                                await deleteUserFromFirestore(user.id);
-                              }}
+                              onClick={() => handleDeleteUser(user)}
                               title="Remove user from database"
                               style={{
                                 display: 'inline-flex',
@@ -2384,7 +2455,7 @@ export const AdminPage = () => {
                     transition: 'all 0.15s ease'
                   }}
                 >
-                  <Compass size={15} /> 🗺️ 1. Floor Layout Map
+                  <Compass size={15} /> Ã°Å¸â€”ÂºÃ¯Â¸Â 1. Floor Layout Map
                 </button>
                 <button
                   type="button"
@@ -2404,7 +2475,7 @@ export const AdminPage = () => {
                     transition: 'all 0.15s ease'
                   }}
                 >
-                  <Grid size={15} /> 📋 2. Stations Directory ({seats.length})
+                  <Grid size={15} /> Ã°Å¸â€œâ€¹ 2. Stations Directory ({seats.length})
                 </button>
                 <button
                   type="button"
@@ -2424,7 +2495,7 @@ export const AdminPage = () => {
                     transition: 'all 0.15s ease'
                   }}
                 >
-                  <Layers size={15} /> 🏷️ 3. Study Zones ({zones.length})
+                  <Layers size={15} /> Ã°Å¸ÂÂ·Ã¯Â¸Â 3. Study Zones ({zones.length})
                 </button>
                 <button
                   type="button"
@@ -2444,7 +2515,29 @@ export const AdminPage = () => {
                     transition: 'all 0.15s ease'
                   }}
                 >
-                  <PlusCircle size={15} /> ⚡ 4. Add / Batch Desk
+                  <PlusCircle size={15} /> Ã¢Å¡Â¡ 4. Add / Batch Desk
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const freed = await reconcileSeats();
+                      alert(freed > 0
+                        ? "Reconciled! " + freed + " orphaned desk(s) freed to AVAILABLE."
+                        : "All desks are consistent. No orphaned seats found.");
+                    } catch (err) {
+                      alert("Reconcile error: " + err.message);
+                    }
+                  }}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: "0.3rem",
+                    padding: "0.5rem 0.85rem", borderRadius: "8px",
+                    border: "1px solid #CBD5E1", backgroundColor: "#F8FAFC",
+                    color: "#475569", fontSize: "0.8rem", fontWeight: 700,
+                    cursor: "pointer", transition: "all 0.15s ease"
+                  }}
+                  title="Auto-free desks with no active student booking"
+                >
+                  Reconcile Desks
                 </button>
               </div>
             </div>
@@ -2484,8 +2577,9 @@ export const AdminPage = () => {
                   setShowCabinStudentModal(true);
                 }}
                 onOpenWalkinForSeat={(seat) => {
-                  setPreselectedSeatForWalkin(seat);
-                  setShowWalkinStudentModal(true);
+                  setPreselectedSeatForRegister(seat);
+                  setPreselectedBookingForRegister(null);
+                  setShowRegisterStudentModal(true);
                 }}
                 onSelectLocker={(locker) => {
                   setSelectedLockerForModal(locker);
@@ -2671,7 +2765,7 @@ export const AdminPage = () => {
                                   }}
                                   title="Open Record Payment Modal"
                                 >
-                                  💳 Pay / Collect
+                                  Ã°Å¸â€™Â³ Pay / Collect
                                 </button>
 
                                 <button
@@ -2791,7 +2885,7 @@ export const AdminPage = () => {
                                         }}
                                         title="Open Record Payment Modal"
                                       >
-                                        💳 Pay
+                                        Ã°Å¸â€™Â³ Pay
                                       </button>
 
                                       <button
@@ -2804,7 +2898,7 @@ export const AdminPage = () => {
                                         }}
                                         title="Complete reservation & set desk available automatically"
                                       >
-                                        <CheckCircle2 size={13} /> Free Desk ✓
+                                        <CheckCircle2 size={13} /> Free Desk Ã¢Å“â€œ
                                       </button>
                                     </>
                                   )}
@@ -2859,7 +2953,7 @@ export const AdminPage = () => {
                         if (window.confirm("Delete all legacy zones from Firebase and register the 5 exact study zones matching the floor layout?")) {
                           const res = await resetAndSeedZones();
                           if (res && res.success) {
-                            alert("✅ Successfully deleted existing zone documents from Firebase and initialized the 5 official floor layout study zones!");
+                            alert("Ã¢Å“â€¦ Successfully deleted existing zone documents from Firebase and initialized the 5 official floor layout study zones!");
                           } else {
                             alert("Failed to reset zones: " + (res?.error || 'Unknown error'));
                           }
@@ -3243,9 +3337,9 @@ export const AdminPage = () => {
 
               <div style={{ display: 'flex', gap: '0.4rem', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '8px' }}>
                 {[
-                  ['WEBSITE_ONLY', '🌐 Website Online Bookings', '#2563EB'],
-                  ['ALL', '📋 All Channels', '#0F172A'],
-                  ['WALKIN_ONLY', '🚶 Walk-ins / Manual', '#D97706']
+                  ['WEBSITE_ONLY', 'Ã°Å¸Å’Â Website Online Bookings', '#2563EB'],
+                  ['ALL', 'Ã°Å¸â€œâ€¹ All Channels', '#0F172A'],
+                  ['WALKIN_ONLY', 'Ã°Å¸Å¡Â¶ Walk-ins / Manual', '#D97706']
                 ].map(([mode, label, activeColor]) => (
                   <button
                     key={mode}
@@ -3274,11 +3368,13 @@ export const AdminPage = () => {
                 style={{ padding: '0.55rem 0.85rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', fontWeight: 600 }}
               >
                 <option value="ALL">All Statuses</option>
-                <option value="PENDING_CONFIRMATION">Pending Admin Confirmation</option>
+                <option value="PENDING">Pending Admin Action</option>
+                <option value="APPROVED">Approved (Reserved)</option>
                 <option value="CONFIRMED">Confirmed</option>
                 <option value="CHECKED_IN">Checked In (Occupied)</option>
                 <option value="COMPLETED">Completed</option>
                 <option value="CANCELLED">Cancelled</option>
+                <option value="REJECTED">Rejected</option>
               </select>
             </div>
 
@@ -3312,10 +3408,10 @@ export const AdminPage = () => {
                         {booking.userName}
                       </div>
                       <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: '0.75rem' }}>
-                        Desk <strong style={{ color: '#0F172A' }}>{booking.seatNumber}</strong> • {booking.passType} Pass
+                        Desk <strong style={{ color: '#0F172A' }}>{booking.seatNumber}</strong> Ã¢â‚¬Â¢ {booking.passType} Pass
                         {booking.hasLocker ? (
                           <span style={{ marginLeft: '0.5rem', backgroundColor: '#FEF3C7', color: '#92400E', padding: '0.15rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700 }}>
-                            🔒 Locker (+NPR {booking.lockerFee || 0})
+                            Ã°Å¸â€â€™ Locker (+NPR {booking.lockerFee || 0})
                           </span>
                         ) : (
                           <span style={{ marginLeft: '0.5rem', color: '#94A3B8', fontSize: '0.75rem' }}>No Locker</span>
@@ -3347,10 +3443,10 @@ export const AdminPage = () => {
                             gap: '0.35rem'
                           }}
                         >
-                          <CheckCircle2 size={15} /> Confirm Booking & Seat
+                          <CheckCircle2 size={15} /> Approve & Reserve Desk
                         </button>
                         <button
-                          onClick={() => changeBookingStatus(booking.id, booking.seatId, 'CANCELLED')}
+                          onClick={() => handleRejectBooking(booking)}
                           style={{
                             backgroundColor: '#FEE2E2',
                             color: '#991B1B',
@@ -3375,23 +3471,21 @@ export const AdminPage = () => {
             <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
               <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #E2E8F0', fontWeight: 700, fontSize: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>All Bookings Ledger ({filteredBookings.length})</span>
-                <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontWeight: 500 }}>Scroll right to see all columns →</span>
+                <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontWeight: 500 }}>Scroll right to see all columns Ã¢â€ â€™</span>
               </div>
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', minWidth: '1100px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.82rem' }}>
+                <table style={{ width: '100%', minWidth: '1000px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.82rem' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #E2E8F0', color: '#475569', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                      <th style={{ padding: '0.75rem 0.85rem', whiteSpace: 'nowrap', minWidth: '110px' }}>Code</th>
-                      <th style={{ padding: '0.75rem 0.85rem', whiteSpace: 'nowrap', minWidth: '160px' }}>Customer</th>
-                      <th style={{ padding: '0.75rem 0.85rem', whiteSpace: 'nowrap', minWidth: '70px' }}>Desk</th>
-                      <th style={{ padding: '0.75rem 0.85rem', whiteSpace: 'nowrap', minWidth: '90px' }}>Pass</th>
-                      <th style={{ padding: '0.75rem 0.85rem', whiteSpace: 'nowrap', minWidth: '90px' }}>Total Fee</th>
-                      <th style={{ padding: '0.75rem 0.85rem', whiteSpace: 'nowrap', minWidth: '80px' }}>Locker</th>
-                      <th style={{ padding: '0.75rem 0.85rem', whiteSpace: 'nowrap', minWidth: '110px' }}>Booking Status</th>
-                      <th style={{ padding: '0.75rem 0.85rem', whiteSpace: 'nowrap', minWidth: '90px' }}>Payment</th>
-                      <th style={{ padding: '0.75rem 0.85rem', whiteSpace: 'nowrap', minWidth: '90px' }}>Paid</th>
-                      <th style={{ padding: '0.75rem 0.85rem', whiteSpace: 'nowrap', minWidth: '130px' }}>Balance Due</th>
-                      <th style={{ padding: '0.75rem 0.85rem', whiteSpace: 'nowrap', minWidth: '170px' }}>Actions</th>
+                      <th style={{ padding: '0.8rem 0.9rem', whiteSpace: 'nowrap' }}>Student</th>
+                      <th style={{ padding: '0.8rem 0.9rem', whiteSpace: 'nowrap' }}>Contact</th>
+                      <th style={{ padding: '0.8rem 0.9rem', whiteSpace: 'nowrap' }}>Seat</th>
+                      <th style={{ padding: '0.8rem 0.9rem', whiteSpace: 'nowrap' }}>Package</th>
+                      <th style={{ padding: '0.8rem 0.9rem', whiteSpace: 'nowrap' }}>Start</th>
+                      <th style={{ padding: '0.8rem 0.9rem', whiteSpace: 'nowrap' }}>Expiry</th>
+                      <th style={{ padding: '0.8rem 0.9rem', whiteSpace: 'nowrap' }}>Booking Status</th>
+                      <th style={{ padding: '0.8rem 0.9rem', whiteSpace: 'nowrap' }}>Payment</th>
+                      <th style={{ padding: '0.8rem 0.9rem', whiteSpace: 'nowrap' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3399,139 +3493,185 @@ export const AdminPage = () => {
                       const total = Number(b.totalAmount || 0);
                       const paid = b.paymentStatus === 'PAID' ? total : Number(b.amountPaid || 0);
                       const remaining = Math.max(0, total - paid);
+                      const isPending = b.status === 'PENDING' || b.status === 'PENDING_CONFIRMATION';
+                      const isActive = ['CONFIRMED', 'APPROVED', 'CHECKED_IN'].includes(b.status);
+
                       return (
                         <tr key={b.id} style={{ borderBottom: '1px solid #F1F5F9', verticalAlign: 'middle' }}>
-                          {/* Code */}
-                          <td style={{ padding: '0.7rem 0.85rem', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap' }}>{b.bookingCode}</td>
-
-                          {/* Customer */}
-                          <td style={{ padding: '0.7rem 0.85rem' }}>
-                            <div style={{ fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>{b.userName}</div>
-                            <div style={{ fontSize: '0.72rem', color: '#94A3B8', whiteSpace: 'nowrap', marginTop: '0.1rem' }}>{b.userEmail}</div>
+                          {/* Student */}
+                          <td style={{ padding: '0.75rem 0.9rem' }}>
+                            <div style={{ fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap' }}>{b.userName}</div>
+                            <div style={{ fontSize: '0.72rem', color: '#64748B' }}>{b.bookingCode}</div>
                           </td>
 
-                          {/* Desk */}
-                          <td style={{ padding: '0.7rem 0.85rem', fontWeight: 800, color: '#2563EB', whiteSpace: 'nowrap' }}>#{b.seatNumber}</td>
+                          {/* Contact */}
+                          <td style={{ padding: '0.75rem 0.9rem' }}>
+                            <div style={{ fontWeight: 600, color: '#0F172A', whiteSpace: 'nowrap' }}>{b.userPhone || 'Ã¢â‚¬â€'}</div>
+                            <div style={{ fontSize: '0.72rem', color: '#94A3B8', whiteSpace: 'nowrap' }}>{b.userEmail || ''}</div>
+                          </td>
 
-                          {/* Pass */}
-                          <td style={{ padding: '0.7rem 0.85rem', whiteSpace: 'nowrap' }}>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 700, backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>
+                          {/* Seat */}
+                          <td style={{ padding: '0.75rem 0.9rem', fontWeight: 800, color: '#2563EB', whiteSpace: 'nowrap' }}>
+                            Desk #{b.seatNumber}
+                            {b.hasLocker && (
+                              <div style={{ fontSize: '0.7rem', color: '#6D28D9', fontWeight: 700 }}>Ã°Å¸â€â€™ {b.lockerNumber || 'Locker'}</div>
+                            )}
+                          </td>
+
+                          {/* Package */}
+                          <td style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
                               {b.passType || 'DAILY'}
                             </span>
                           </td>
 
-                          {/* Total Fee */}
-                          <td style={{ padding: '0.7rem 0.85rem', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap' }}>
-                            NPR {total.toLocaleString()}
+                          {/* Start */}
+                          <td style={{ padding: '0.75rem 0.9rem', color: '#334155', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                            {b.startDate || 'Ã¢â‚¬â€'}
                           </td>
 
-                          {/* Locker */}
-                          <td style={{ padding: '0.7rem 0.85rem', whiteSpace: 'nowrap' }}>
-                            {b.hasLocker ? (
-                              <span style={{ fontSize: '0.72rem', fontWeight: 700, backgroundColor: '#FEF3C7', color: '#92400E', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
-                                🔒 Yes
-                              </span>
-                            ) : (
-                              <span style={{ fontSize: '0.72rem', color: '#CBD5E1', fontWeight: 600 }}>—</span>
-                            )}
+                          {/* Expiry */}
+                          <td style={{ padding: '0.75rem 0.9rem', color: '#D97706', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                            {b.endDate || calculateExpectedAdminEndDate(b.startDate, b.passType) || 'Ã¢â‚¬â€'}
                           </td>
 
                           {/* Booking Status */}
-                          <td style={{ padding: '0.7rem 0.85rem', whiteSpace: 'nowrap' }}>
+                          <td style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>
                             <span style={{
-                              padding: '0.2rem 0.5rem',
+                              padding: '0.25rem 0.55rem',
                               borderRadius: '10px',
-                              fontSize: '0.7rem',
-                              fontWeight: 700,
-                              backgroundColor: b.status === 'CONFIRMED' ? '#EFF6FF' : b.status === 'CHECKED_IN' ? '#ECFDF5' : b.status === 'PENDING_CONFIRMATION' ? '#FEF3C7' : b.status === 'CANCELLED' ? '#FEF2F2' : '#F3F4F6',
-                              color: b.status === 'CONFIRMED' ? '#1D4ED8' : b.status === 'CHECKED_IN' ? '#047857' : b.status === 'PENDING_CONFIRMATION' ? '#B45309' : b.status === 'CANCELLED' ? '#B91C1C' : '#4B5563'
-                            }}>
-                              {b.status === 'PENDING_CONFIRMATION' ? 'PENDING' : b.status}
-                            </span>
-                          </td>
-
-                          {/* Payment Status */}
-                          <td style={{ padding: '0.7rem 0.85rem', whiteSpace: 'nowrap' }}>
-                            <span style={{
-                              padding: '0.2rem 0.5rem',
-                              borderRadius: '10px',
-                              fontSize: '0.7rem',
+                              fontSize: '0.72rem',
                               fontWeight: 800,
-                              backgroundColor: b.paymentStatus === 'PAID' ? '#D1FAE5' : b.paymentStatus === 'PARTIAL' ? '#FEF3C7' : '#FEE2E2',
-                              color: b.paymentStatus === 'PAID' ? '#065F46' : b.paymentStatus === 'PARTIAL' ? '#92400E' : '#991B1B'
+                              backgroundColor: (b.status === 'CONFIRMED' || b.status === 'APPROVED') ? '#EFF6FF' : b.status === 'CHECKED_IN' ? '#ECFDF5' : isPending ? '#FEF3C7' : '#FEF2F2',
+                              color: (b.status === 'CONFIRMED' || b.status === 'APPROVED') ? '#1D4ED8' : b.status === 'CHECKED_IN' ? '#047857' : isPending ? '#B45309' : '#B91C1C'
                             }}>
-                              {b.paymentStatus || 'PENDING'}
+                              {isPending ? 'PENDING' : b.status}
                             </span>
                           </td>
 
-                          {/* Paid */}
-                          <td style={{ padding: '0.7rem 0.85rem', fontWeight: 700, color: '#047857', whiteSpace: 'nowrap' }}>
-                            NPR {paid.toLocaleString()}
-                          </td>
-
-                          {/* Balance Due */}
-                          <td style={{ padding: '0.7rem 0.85rem', whiteSpace: 'nowrap' }}>
-                            <div style={{ fontWeight: 800, color: remaining === 0 ? '#047857' : (b.paymentStatus === 'PARTIAL' ? '#D97706' : '#DC2626') }}>
-                              {remaining === 0 ? 'Nil ✓' : `NPR ${remaining.toLocaleString()}`}
+                          {/* Payment */}
+                          <td style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>
+                            <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '0.8rem' }}>
+                              Paid: NPR {paid.toLocaleString()} / {total.toLocaleString()}
                             </div>
-                            {remaining > 0 && (
-                              <button
-                                onClick={() => handleOpenRecordPaymentModal(b)}
-                                style={{ marginTop: '0.2rem', fontSize: '0.68rem', padding: '0.2rem 0.5rem', borderRadius: '4px', border: 'none', backgroundColor: '#047857', color: '#FFFFFF', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
-                              >
-                                💳 Record Payment
-                              </button>
-                            )}
+                            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: remaining === 0 ? '#047857' : '#DC2626' }}>
+                              {remaining === 0 ? 'Ã¢Å“â€œ Paid in Full' : `Due: NPR ${remaining.toLocaleString()}`}
+                            </div>
                           </td>
 
-                          {/* Actions */}
-                          <td style={{ padding: '0.7rem 0.85rem', whiteSpace: 'nowrap' }}>
-                            <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexWrap: 'nowrap' }}>
-                              <select
-                                value={b.status}
-                                onChange={(e) => {
-                                  if (e.target.value === 'CONFIRMED' && b.status === 'PENDING_CONFIRMATION') {
-                                    setSelectedBookingForConfirmation(b);
-                                    setShowReservationConfirmModal(true);
-                                  } else {
-                                    changeBookingStatus(b.id, b.seatId, e.target.value);
-                                  }
-                                }}
-                                style={{ padding: '0.3rem 0.4rem', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}
-                              >
-                                <option value="PENDING_CONFIRMATION">Pending</option>
-                                <option value="CONFIRMED">Confirmed</option>
-                                <option value="CHECKED_IN">Checked In</option>
-                                <option value="COMPLETED">Completed</option>
-                                <option value="CANCELLED">Cancelled</option>
-                              </select>
-
+                          {/* Actions (State-dependent) */}
+                          <td style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                              {/* 1. View button */}
                               <button
                                 onClick={() => {
-                                  setSelectedBookingForEdit(b);
-                                  setEditBookingForm({
-                                    seatId: b.seatId || '',
-                                    seatNumber: b.seatNumber || '',
-                                    shift: b.shift || 'FULL_DAY',
-                                    bookingTime: b.bookingTime || '08:00 AM - 08:00 PM',
-                                    status: b.status || 'CONFIRMED',
-                                    paymentStatus: b.paymentStatus || 'PENDING',
-                                    totalAmount: b.totalAmount || 0,
-                                    amountPaid: b.paymentStatus === 'PAID' ? (b.totalAmount || 0) : (b.amountPaid || 0),
-                                    pendingAmount: b.paymentStatus === 'PAID' ? 0 : (b.pendingAmount !== undefined ? b.pendingAmount : (b.totalAmount || 0)),
-                                    hasLocker: b.hasLocker || false,
-                                    passType: b.passType || 'DAILY'
-                                  });
-                                  setShowEditBookingModal(true);
+                                  const u = (users || []).find(user => user.id === b.userId || user.phone === b.userPhone || user.email === b.userEmail);
+                                  setSelectedUserForProfile(u || { fullName: b.userName, name: b.userName, phone: b.userPhone, email: b.userEmail, id: b.userId });
                                 }}
                                 style={{
                                   display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
                                   padding: '0.3rem 0.55rem', borderRadius: '6px', border: '1px solid #CBD5E1',
-                                  backgroundColor: '#FFFFFF', color: '#0F172A', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap'
+                                  backgroundColor: '#FFFFFF', color: '#0F172A', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
                                 }}
                               >
-                                <Edit3 size={12} /> Edit
+                                <Eye size={12} /> View
                               </button>
+
+                              {/* 2. State-dependent: PENDING actions */}
+                              {isPending && (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      setPreselectedBookingForRegister(b);
+                                      setPreselectedSeatForRegister(null);
+                                      setShowRegisterStudentModal(true);
+                                    }}
+                                    style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
+                                      padding: '0.3rem 0.65rem', borderRadius: '6px', border: 'none',
+                                      backgroundColor: '#059669', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer'
+                                    }}
+                                  >
+                                    <CheckCircle2 size={12} /> Approve / Register
+                                  </button>
+                                  <button
+                                    onClick={() => handleRejectBooking(b)}
+                                    style={{
+                                      padding: '0.3rem 0.55rem', borderRadius: '6px', border: 'none',
+                                      backgroundColor: '#FEE2E2', color: '#991B1B', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
+                                    }}
+                                  >
+                                    Reject
+                                  </button>
+                                </>
+                              )}
+
+                              {/* 3. State-dependent: ACTIVE actions */}
+                              {isActive && (
+                                <>
+                                  {remaining > 0 && (
+                                    <button
+                                      onClick={() => handleOpenRecordPaymentModal(b)}
+                                      style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
+                                        padding: '0.3rem 0.6rem', borderRadius: '6px', border: 'none',
+                                        backgroundColor: '#047857', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer'
+                                      }}
+                                    >
+                                      <CreditCard size={12} /> Record Payment
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => {
+                                      setSelectedBookingForEdit(b);
+                                      const start = b.startDate || new Date().toISOString().split('T')[0];
+                                      const pass = b.passType || 'DAILY';
+                                      const end = b.endDate || calculateExpectedAdminEndDate(start, pass);
+                                      setEditBookingForm({
+                                        seatId: b.seatId || '',
+                                        seatNumber: b.seatNumber || '',
+                                        shift: b.shift || 'FULL_DAY',
+                                        bookingTime: b.bookingTime || '06:00 AM - 09:00 PM',
+                                        startDate: start,
+                                        endDate: end,
+                                        status: b.status || 'CONFIRMED',
+                                        paymentStatus: b.paymentStatus || 'PENDING',
+                                        totalAmount: b.totalAmount || 0,
+                                        amountPaid: b.paymentStatus === 'PAID' ? (b.totalAmount || 0) : (b.amountPaid || 0),
+                                        pendingAmount: b.paymentStatus === 'PAID' ? 0 : (b.pendingAmount !== undefined ? b.pendingAmount : (b.totalAmount || 0)),
+                                        hasLocker: b.hasLocker || false,
+                                        passType: pass
+                                      });
+                                      setShowEditBookingModal(true);
+                                    }}
+                                    style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
+                                      padding: '0.3rem 0.55rem', borderRadius: '6px', border: '1px solid #CBD5E1',
+                                      backgroundColor: '#FFFFFF', color: '#0F172A', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
+                                    }}
+                                  >
+                                    <Edit3 size={12} /> Edit
+                                  </button>
+                                </>
+                              )}
+
+                              {/* 4. State-dependent: COMPLETED / EXPIRED / CANCELLED / REJECTED actions */}
+                              {!isPending && !isActive && (
+                                <button
+                                  onClick={() => {
+                                    setPreselectedBookingForRegister(b);
+                                    setPreselectedSeatForRegister(null);
+                                    setShowRegisterStudentModal(true);
+                                  }}
+                                  style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
+                                    padding: '0.3rem 0.65rem', borderRadius: '6px', border: 'none',
+                                    backgroundColor: '#2563EB', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer'
+                                  }}
+                                >
+                                  <RotateCcw size={12} /> Renew
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -3648,7 +3788,7 @@ export const AdminPage = () => {
                       padding: '0.2rem 0.5rem',
                       borderRadius: '6px'
                     }}>
-                      {plan.lockerEligible ? '🔒 Locker Add-on Available' : 'No Locker Option'}
+                      {plan.lockerEligible ? 'Ã°Å¸â€â€™ Locker Add-on Available' : 'No Locker Option'}
                     </span>
 
                     <button
@@ -3693,173 +3833,246 @@ export const AdminPage = () => {
         {/* ==================== TAB 4: REAL-TIME FINANCE & REVENUE ==================== */}
         {activeTab === 'FINANCE' && (
           <div>
-            {/* Financial KPI Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
-              
-              <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Gross Revenue</div>
-                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#0F172A', margin: '0.3rem 0' }}>NPR {totalGrossRevenue.toLocaleString()}</div>
-                <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Total value across active bookings</div>
-              </div>
+            {(() => {
+              const activeFinanceList = filteredFinanceBookings.filter(b => b.status !== 'CANCELLED' && b.status !== 'REJECTED');
+              const financeTotalGross = activeFinanceList.reduce((sum, b) => sum + (Number(b.totalAmount) || 0), 0);
+              const financeTotalCollected = activeFinanceList.reduce((sum, b) => {
+                const total = Number(b.totalAmount) || 0;
+                const paid = b.paymentStatus === 'PAID' ? total : Number(b.amountPaid || 0);
+                return sum + paid;
+              }, 0);
+              const financeTotalPending = Math.max(0, financeTotalGross - financeTotalCollected);
+              const financePaymentCount = filteredFinanceBookings.filter(b => b.paymentStatus === 'PAID' || Number(b.amountPaid || 0) > 0).length;
 
-              <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#059669', textTransform: 'uppercase' }}>Collected (Paid) Revenue</div>
-                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#059669', margin: '0.3rem 0' }}>NPR {collectedPaidRevenue.toLocaleString()}</div>
-                <div style={{ fontSize: '0.75rem', color: '#047857', fontWeight: 600 }}>Cleared transactions in cash/eSewa</div>
-              </div>
+              return (
+                <>
+                  {/* Financial KPI Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '1.5rem' }}>
+                    
+                    <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#059669', textTransform: 'uppercase' }}>Total Collected</div>
+                      <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#059669', margin: '0.3rem 0' }}>NPR {financeTotalCollected.toLocaleString()}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#047857', fontWeight: 600 }}>Cleared cash & digital transactions</div>
+                    </div>
 
-              <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#D97706', textTransform: 'uppercase' }}>Pending Receivables</div>
-                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#D97706', margin: '0.3rem 0' }}>NPR {pendingReceivables.toLocaleString()}</div>
-                <div style={{ fontSize: '0.75rem', color: '#B45309', fontWeight: 600 }}>Pending desk confirmation or payment</div>
-              </div>
+                    <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#D97706', textTransform: 'uppercase' }}>Total Pending (Receivables)</div>
+                      <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#D97706', margin: '0.3rem 0' }}>NPR {financeTotalPending.toLocaleString()}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#B45309', fontWeight: 600 }}>Pending student balances</div>
+                    </div>
 
-              <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#2563EB', textTransform: 'uppercase' }}>Avg Ticket Value</div>
-                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#2563EB', margin: '0.3rem 0' }}>NPR {avgBookingValue.toLocaleString()}</div>
-                <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Per customer booking</div>
-              </div>
+                    <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#0F172A', textTransform: 'uppercase' }}>Total Outstanding (Gross)</div>
+                      <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#0F172A', margin: '0.3rem 0' }}>NPR {financeTotalGross.toLocaleString()}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Total value across filtered bookings</div>
+                    </div>
 
-            </div>
+                    <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#2563EB', textTransform: 'uppercase' }}>Number of Payments</div>
+                      <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#2563EB', margin: '0.3rem 0' }}>{financePaymentCount}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Cleared or partial transactions</div>
+                    </div>
 
-            {/* Pass Type Revenue Breakdown */}
-            <div style={{ backgroundColor: '#FFFFFF', padding: '1.5rem', borderRadius: '12px', border: '1px solid #E2E8F0', marginBottom: '2rem' }}>
-              <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', fontWeight: 800, color: '#0F172A' }}>
-                Revenue Breakdown by Access Tier
-              </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                <div style={{ backgroundColor: '#F8FAFC', padding: '1rem', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#64748B', fontWeight: 600 }}>Daily Passes</div>
-                  <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0F172A', marginTop: '0.2rem' }}>NPR {dailyPassRevenue.toLocaleString()}</div>
-                </div>
+                  </div>
 
-                <div style={{ backgroundColor: '#F8FAFC', padding: '1rem', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#64748B', fontWeight: 600 }}>Weekly Passes</div>
-                  <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0F172A', marginTop: '0.2rem' }}>NPR {weeklyPassRevenue.toLocaleString()}</div>
-                </div>
+                  {/* Filter & Export Bar */}
+                  <div style={{
+                    backgroundColor: '#FFFFFF',
+                    padding: '1rem 1.25rem',
+                    borderRadius: '12px',
+                    border: '1px solid #E2E8F0',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '1rem',
+                    marginBottom: '1.5rem'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Filter By Date:</span>
+                      {[
+                        ['ALL', 'All Time'],
+                        ['TODAY', 'Today'],
+                        ['THIS_WEEK', 'This Week'],
+                        ['THIS_MONTH', 'This Month'],
+                        ['LAST_MONTH', 'Last Month'],
+                        ['CUSTOM', 'Custom Range']
+                      ].map(([key, label]) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setFinanceDateFilter(key)}
+                          style={{
+                            padding: '0.35rem 0.75rem',
+                            borderRadius: '6px',
+                            border: '1px solid',
+                            borderColor: financeDateFilter === key ? '#0F172A' : '#CBD5E1',
+                            backgroundColor: financeDateFilter === key ? '#0F172A' : '#FFFFFF',
+                            color: financeDateFilter === key ? '#FFFFFF' : '#475569',
+                            fontWeight: 700,
+                            fontSize: '0.78rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
 
-                <div style={{ backgroundColor: '#F8FAFC', padding: '1rem', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#64748B', fontWeight: 600 }}>Monthly Memberships</div>
-                  <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0F172A', marginTop: '0.2rem' }}>NPR {monthlyPassRevenue.toLocaleString()}</div>
-                </div>
-              </div>
-            </div>
+                      {financeDateFilter === 'CUSTOM' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginLeft: '0.5rem' }}>
+                          <input
+                            type="date"
+                            value={financeCustomStartDate}
+                            onChange={e => setFinanceCustomStartDate(e.target.value)}
+                            style={{ padding: '0.35rem 0.5rem', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.78rem' }}
+                          />
+                          <span style={{ fontSize: '0.78rem', color: '#64748B' }}>to</span>
+                          <input
+                            type="date"
+                            value={financeCustomEndDate}
+                            onChange={e => setFinanceCustomEndDate(e.target.value)}
+                            style={{ padding: '0.35rem 0.5rem', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.78rem' }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <select
+                        value={financeStatusFilter}
+                        onChange={(e) => setFinanceStatusFilter(e.target.value)}
+                        style={{ padding: '0.45rem 0.8rem', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem', fontWeight: 700 }}
+                      >
+                        <option value="ALL">All Payment Statuses</option>
+                        <option value="PAID">Paid Only</option>
+                        <option value="PARTIAL">Partial Payment</option>
+                        <option value="PENDING">Pending Only</option>
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={handleExportPaymentsExcel}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                          padding: '0.45rem 1rem',
+                          borderRadius: '6px',
+                          border: 'none',
+                          backgroundColor: '#059669',
+                          color: '#FFFFFF',
+                          fontWeight: 800,
+                          fontSize: '0.82rem',
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 4px rgba(5, 150, 105, 0.2)'
+                        }}
+                      >
+                        <Download size={15} /> Export to Excel (.xlsx)
+                      </button>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
 
             {/* Financial Transactions Ledger */}
             <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
-              <div style={{ padding: '1.25rem', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+              <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0F172A' }}>
-                  Financial Transactions & Payment Ledger
+                  Financial Transactions & Payment Ledger ({filteredFinanceBookings.length})
                 </div>
-
-                <select
-                  value={financeStatusFilter}
-                  onChange={(e) => setFinanceStatusFilter(e.target.value)}
-                  style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.8rem', fontWeight: 600 }}
-                >
-                  <option value="ALL">All Payment Statuses</option>
-                  <option value="PAID">Paid Only</option>
-                  <option value="PARTIAL">Partial Payment</option>
-                  <option value="PENDING">Pending Only</option>
-                </select>
+                <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                  Showing filtered payments based on selected date and status filters
+                </span>
               </div>
 
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569' }}>
-                    <th style={{ padding: '0.85rem 1.25rem' }}>Transaction / Code</th>
-                    <th style={{ padding: '0.85rem 1.25rem' }}>Customer Name</th>
-                    <th style={{ padding: '0.85rem 1.25rem' }}>Desk</th>
-                    <th style={{ padding: '0.85rem 1.25rem' }}>Pass Tier</th>
-                    <th style={{ padding: '0.85rem 1.25rem' }}>Total Fee (NPR)</th>
-                    <th style={{ padding: '0.85rem 1.25rem' }}>Status</th>
-                    <th style={{ padding: '0.85rem 1.25rem' }}>Total Paid</th>
-                    <th style={{ padding: '0.85rem 1.25rem' }}>Balance Due</th>
-                    <th style={{ padding: '0.85rem 1.25rem' }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredFinanceBookings.map(b => (
-                    <tr key={b.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                      <td style={{ padding: '0.85rem 1.25rem', fontWeight: 800, color: '#0F172A' }}>{b.bookingCode}</td>
-                      <td style={{ padding: '0.85rem 1.25rem', fontWeight: 700 }}>{b.userName}</td>
-                      <td style={{ padding: '0.85rem 1.25rem', fontWeight: 800, color: '#2563EB' }}>{b.seatNumber}</td>
-                      <td style={{ padding: '0.85rem 1.25rem', color: '#475569' }}>{b.passType}</td>
-                      {/* Total Fee */}
-                      <td style={{ padding: '0.85rem 1.25rem', fontWeight: 800, color: '#0F172A' }}>NPR {(b.totalAmount || 0).toLocaleString()}</td>
-                      {/* Status Badge */}
-                      <td style={{ padding: '0.85rem 1.25rem' }}>
-                        <span style={{
-                          padding: '0.25rem 0.65rem',
-                          borderRadius: '12px',
-                          fontSize: '0.75rem',
-                          fontWeight: 800,
-                          backgroundColor: b.paymentStatus === 'PAID' ? '#D1FAE5' : b.paymentStatus === 'PARTIAL' ? '#FEF3C7' : '#FEE2E2',
-                          color: b.paymentStatus === 'PAID' ? '#065F46' : b.paymentStatus === 'PARTIAL' ? '#92400E' : '#991B1B'
-                        }}>
-                          {b.paymentStatus || 'PENDING'}
-                        </span>
-                      </td>
-                      {/* Total Paid */}
-                      <td style={{ padding: '0.85rem 1.25rem' }}>
-                        <div style={{ fontWeight: 700, color: '#047857' }}>
-                          NPR {b.paymentStatus === 'PAID' ? Number(b.totalAmount || 0).toLocaleString() : Number(b.amountPaid || 0).toLocaleString()}
-                        </div>
-                      </td>
-                      {/* Balance Due */}
-                      <td style={{ padding: '0.85rem 1.25rem' }}>
-                        {(() => {
-                          const total = Number(b.totalAmount || 0);
-                          const paid = b.paymentStatus === 'PAID' ? total : Number(b.amountPaid || 0);
-                          const remaining = Math.max(0, total - paid);
-                          return (
-                            <div style={{ fontWeight: 800, color: remaining === 0 ? '#047857' : (b.paymentStatus === 'PARTIAL' ? '#D97706' : '#DC2626') }}>
-                              {remaining === 0 ? 'Nil ✓' : `NPR ${remaining.toLocaleString()}`}
-                            </div>
-                          );
-                        })()}
-                      </td>
-                      {/* Actions */}
-                      <td style={{ padding: '0.85rem 1.25rem' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                          {(() => {
-                            const total = Number(b.totalAmount || 0);
-                            const paid = b.paymentStatus === 'PAID' ? total : Number(b.amountPaid || 0);
-                            const remaining = Math.max(0, total - paid);
-                            return (
-                              <>
-                                {b.paymentStatus !== 'PAID' && (
-                                  <button
-                                    onClick={() => handleOpenRecordPaymentModal(b)}
-                                    style={{ padding: '0.3rem 0.6rem', borderRadius: '5px', border: 'none', backgroundColor: '#059669', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                                  >
-                                    💳 Record Payment
-                                  </button>
-                                )}
-                                {b.paymentStatus === 'PAID' ? (
-                                  <button
-                                    onClick={() => changePaymentStatus(b.id, 'PENDING')}
-                                    style={{ padding: '0.3rem 0.6rem', borderRadius: '5px', border: '1px solid #CBD5E1', backgroundColor: '#F8FAFC', color: '#64748B', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}
-                                  >
-                                    Mark Unpaid
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={() => changePaymentStatus(b.id, 'PAID')}
-                                    style={{ padding: '0.3rem 0.6rem', borderRadius: '5px', border: 'none', backgroundColor: '#0F172A', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                                  >
-                                    <Check size={11} /> Mark Full Paid
-                                  </button>
-                                )}
-                              </>
-                            );
-                          })()}
-                        </div>
-                      </td>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', minWidth: '1050px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.82rem' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                      <th style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>Payment Date</th>
+                      <th style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>Student</th>
+                      <th style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>Contact</th>
+                      <th style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>Desk</th>
+                      <th style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>Package</th>
+                      <th style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>Total (NPR)</th>
+                      <th style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>Paid (NPR)</th>
+                      <th style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>Due (NPR)</th>
+                      <th style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>Method</th>
+                      <th style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>Receipt ID</th>
+                      <th style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>Status</th>
+                      <th style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filteredFinanceBookings.map(b => {
+                      const total = Number(b.totalAmount || 0);
+                      const paid = b.paymentStatus === 'PAID' ? total : Number(b.amountPaid || 0);
+                      const due = Math.max(0, total - paid);
+                      const paymentDate = b.createdAt ? b.createdAt.split('T')[0] : (b.startDate || 'Ã¢â‚¬â€');
+
+                      return (
+                        <tr key={b.id} style={{ borderBottom: '1px solid #F1F5F9', verticalAlign: 'middle' }}>
+                          <td style={{ padding: '0.75rem 0.9rem', fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>
+                            {paymentDate}
+                          </td>
+                          <td style={{ padding: '0.75rem 0.9rem', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap' }}>
+                            {b.userName}
+                          </td>
+                          <td style={{ padding: '0.75rem 0.9rem', fontSize: '0.75rem', color: '#64748B', whiteSpace: 'nowrap' }}>
+                            {b.userPhone || 'Ã¢â‚¬â€'}
+                          </td>
+                          <td style={{ padding: '0.75rem 0.9rem', fontWeight: 800, color: '#2563EB', whiteSpace: 'nowrap' }}>
+                            #{b.seatNumber}
+                          </td>
+                          <td style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>
+                              {b.passType}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.75rem 0.9rem', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap' }}>
+                            NPR {total.toLocaleString()}
+                          </td>
+                          <td style={{ padding: '0.75rem 0.9rem', fontWeight: 700, color: '#047857', whiteSpace: 'nowrap' }}>
+                            NPR {paid.toLocaleString()}
+                          </td>
+                          <td style={{ padding: '0.75rem 0.9rem', fontWeight: 800, color: due === 0 ? '#047857' : '#DC2626', whiteSpace: 'nowrap' }}>
+                            {due === 0 ? 'Nil Ã¢Å“â€œ' : `NPR ${due.toLocaleString()}`}
+                          </td>
+                          <td style={{ padding: '0.75rem 0.9rem', fontSize: '0.75rem', fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>
+                            {b.paymentMethod || 'CASH'}
+                          </td>
+                          <td style={{ padding: '0.75rem 0.9rem', fontSize: '0.75rem', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>
+                            {b.bookingCode || b.id}
+                          </td>
+                          <td style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>
+                            <span style={{
+                              padding: '0.2rem 0.5rem',
+                              borderRadius: '10px',
+                              fontSize: '0.7rem',
+                              fontWeight: 800,
+                              backgroundColor: b.paymentStatus === 'PAID' ? '#D1FAE5' : b.paymentStatus === 'PARTIAL' ? '#FEF3C7' : '#FEE2E2',
+                              color: b.paymentStatus === 'PAID' ? '#065F46' : b.paymentStatus === 'PARTIAL' ? '#92400E' : '#991B1B'
+                            }}>
+                              {b.paymentStatus || 'PENDING'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>
+                            {due > 0 && (
+                              <button
+                                onClick={() => handleOpenRecordPaymentModal(b)}
+                                style={{ padding: '0.25rem 0.55rem', borderRadius: '4px', border: 'none', backgroundColor: '#047857', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                              >
+                                Ã°Å¸â€™Â³ Record Payment
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
           </div>
@@ -3876,7 +4089,7 @@ export const AdminPage = () => {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', fontSize: '0.85rem' }}>
                 <div><strong>Location:</strong> Lazimpat Road, Kathmandu</div>
                 <div><strong>Total Capacity:</strong> 62 Study Stations</div>
-                <div><strong>Operating Hours:</strong> 7:00 AM - 10:00 PM Daily</div>
+                <div><strong>Operating Hours:</strong> 6:00 AM - 9:00 PM Daily</div>
                 <div><strong>Wi-Fi Network:</strong> QuietDesk_Enterprise (Gigabit Fiber)</div>
               </div>
             </div>
@@ -3916,8 +4129,8 @@ export const AdminPage = () => {
 
                   {seedingStatus && (
                     <div style={{
-                      backgroundColor: seedingStatus.includes('❌') ? '#FEE2E2' : '#ECFDF5',
-                      color: seedingStatus.includes('❌') ? '#991B1B' : '#047857',
+                      backgroundColor: seedingStatus.includes('Ã¢ÂÅ’') ? '#FEE2E2' : '#ECFDF5',
+                      color: seedingStatus.includes('Ã¢ÂÅ’') ? '#991B1B' : '#047857',
                       padding: '0.85rem 1.25rem',
                       borderRadius: '8px',
                       fontSize: '0.85rem',
@@ -4254,127 +4467,9 @@ export const AdminPage = () => {
 
       </main>
 
-      {/* ==================== MODAL 1: REGISTER USER ==================== */}
-      {showRegisterUserModal && (
-        <div style={{
-          position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem'
-        }}>
-          <div style={{
-            backgroundColor: '#FFFFFF', borderRadius: '16px', width: '100%', maxWidth: '540px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', overflow: 'hidden'
-          }}>
-            <div style={{ padding: '1.25rem 1.5rem', backgroundColor: '#0F172A', color: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <UserPlus size={18} /> Register New Desk Member
-              </h3>
-              <button onClick={() => setShowRegisterUserModal(false)} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '0.2rem' }}>
-                <X size={20} />
-              </button>
-            </div>
+      {/* Old Register User Modal removed - use RegisterNewStudentModal instead */}
 
-            <form onSubmit={handleRegisterUserSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Aarav Sharma"
-                  value={registerUserForm.fullName}
-                  onChange={e => setRegisterUserForm({ ...registerUserForm, fullName: e.target.value })}
-                  style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
-                />
-              </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Email Address *</label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="aarav@example.com"
-                    value={registerUserForm.email}
-                    onChange={e => setRegisterUserForm({ ...registerUserForm, email: e.target.value })}
-                    style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Phone Number *</label>
-                  <input
-                    type="tel"
-                    required
-                    placeholder="+977 9801234567"
-                    value={registerUserForm.phone}
-                    onChange={e => setRegisterUserForm({ ...registerUserForm, phone: e.target.value })}
-                    style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Pass Tier</label>
-                  <select
-                    value={registerUserForm.passType}
-                    onChange={e => setRegisterUserForm({ ...registerUserForm, passType: e.target.value })}
-                    style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
-                  >
-                    <option value="DAILY">Daily Pass</option>
-                    <option value="WEEKLY">Weekly Pass</option>
-                    <option value="MONTHLY">Monthly Membership</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Emergency Contact Phone</label>
-                  <input
-                    type="tel"
-                    placeholder="+977 9841000000"
-                    value={registerUserForm.emergencyContact}
-                    onChange={e => setRegisterUserForm({ ...registerUserForm, emergencyContact: e.target.value })}
-                    style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Notes / Special Requests</label>
-                <textarea
-                  rows={2}
-                  placeholder="e.g. Prefers window seat, exam prep student..."
-                  value={registerUserForm.notes}
-                  onChange={e => setRegisterUserForm({ ...registerUserForm, notes: e.target.value })}
-                  style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowRegisterUserModal(false)}
-                  style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => handleRegisterUserSubmit(e, false)}
-                  style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#0F172A', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
-                >
-                  Register Only (Close)
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => handleRegisterUserSubmit(e, true)}
-                  style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: 'none', backgroundColor: '#0F172A', color: '#FFFFFF', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
-                >
-                  Register & Create Booking
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ==================== MODAL 2: USER PROFILE & HISTORY ==================== */}
       <StudentProfileModal
@@ -4385,15 +4480,9 @@ export const AdminPage = () => {
         onClose={() => setSelectedUserForProfile(null)}
         onNewReservation={(u) => {
           setSelectedUserForProfile(null);
-          setReservationForm(prev => ({
-            ...prev,
-            userId: u.id,
-            userName: u.fullName || u.name,
-            userEmail: u.email,
-            userPhone: u.phone,
-            passType: u.passType || 'DAILY'
-          }));
-          setShowReservationModal(true);
+          setPreselectedBookingForRegister(null);
+          setPreselectedSeatForRegister(null);
+          setShowRegisterStudentModal(true);
         }}
         onCollectDue={(bookingObj) => {
           handleOpenRecordPaymentModal(bookingObj);
@@ -4405,323 +4494,9 @@ export const AdminPage = () => {
         }}
       />
 
-      {/* ==================== MODAL 3: ADMIN MAKE RESERVATION ==================== */}
-      {showReservationModal && (
-        <div style={{
-          position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem'
-        }}>
-          <div style={{
-            backgroundColor: '#FFFFFF', borderRadius: '16px', width: '100%', maxWidth: '620px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', overflow: 'hidden'
-          }}>
-            <div style={{ padding: '1.25rem 1.5rem', backgroundColor: '#D97706', color: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Calendar size={18} /> Admin Manual Reservation & Desk Booking
-              </h3>
-              <button onClick={() => setShowReservationModal(false)} style={{ background: 'none', border: 'none', color: '#FFFFFF', cursor: 'pointer', padding: '0.2rem' }}>
-                <X size={20} />
-              </button>
-            </div>
+      {/* Old Reservation Modal removed - use RegisterNewStudentModal instead */}
 
-            <form onSubmit={handleAdminReservationSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {/* Select User or Enter Info */}
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Select Registered User (Optional)</label>
-                <select
-                  value={reservationForm.userId}
-                  onChange={e => {
-                    const selectedId = e.target.value;
-                    const foundUser = users.find(u => u.id === selectedId);
-                    if (foundUser) {
-                      setReservationForm({
-                        ...reservationForm,
-                        userId: foundUser.id,
-                        userName: foundUser.fullName,
-                        userEmail: foundUser.email,
-                        userPhone: foundUser.phone,
-                        passType: foundUser.passType || 'DAILY'
-                      });
-                    } else {
-                      setReservationForm({ ...reservationForm, userId: '' });
-                    }
-                  }}
-                  style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
-                >
-                  <option value="">-- Manual Guest / New Entry --</option>
-                  {users.map(u => {
-                    const todayStr = new Date().toISOString().split('T')[0];
-                    const activeBk = (bookings || []).find(b => 
-                      (b.userId === u.id || (b.userPhone && u.phone && b.userPhone.replace(/\D/g, '') === u.phone.replace(/\D/g, ''))) &&
-                      !['CANCELLED', 'COMPLETED'].includes(b.status) &&
-                      (!b.endDate || b.endDate >= todayStr)
-                    );
-                    return (
-                      <option 
-                        key={u.id} 
-                        value={u.id}
-                        disabled={Boolean(activeBk)}
-                      >
-                        {u.fullName} ({u.email || u.phone || 'No Contact'}) {activeBk ? `[🔴 Occupies Desk ${activeBk.seatNumber}]` : `[🟢 Available - ${u.passType || 'DAILY'}]`}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Member Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Full Name"
-                    value={reservationForm.userName}
-                    onChange={e => setReservationForm({ ...reservationForm, userName: e.target.value })}
-                    style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Email Address *</label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="email@example.com"
-                    value={reservationForm.userEmail}
-                    onChange={e => setReservationForm({ ...reservationForm, userEmail: e.target.value })}
-                    style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Select Station / Desk *</label>
-                  <select
-                    required
-                    value={reservationForm.seatId}
-                    onChange={e => {
-                      const selectedSeat = seats.find(s => s.id === e.target.value);
-                      setReservationForm({
-                        ...reservationForm,
-                        seatId: e.target.value,
-                        seatNumber: selectedSeat ? selectedSeat.seatNumber : ''
-                      });
-                    }}
-                    style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
-                  >
-                    <option value="">-- Choose Available Station --</option>
-                    {availableSeatsList.map(s => (
-                      <option key={s.id} value={s.id}>Desk {s.seatNumber} ({s.zone} - NPR {s.pricePerDay}/day)</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Pass Tier</label>
-                  <select
-                    value={reservationForm.passType}
-                    onChange={e => {
-                      const newPassType = e.target.value;
-                      const feeInfo = calculateFee({
-                        passType: newPassType,
-                        hasLocker: reservationForm.hasLocker,
-                        seatId: reservationForm.seatId
-                      });
-                      setReservationForm({
-                        ...reservationForm,
-                        passType: newPassType,
-                        totalAmount: feeInfo.totalAmount
-                      });
-                    }}
-                    style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
-                  >
-                    <option value="DAILY">Daily Pass (NPR 350)</option>
-                    <option value="WEEKLY">Weekly Pass (NPR 2,100)</option>
-                    <option value="MONTHLY">Monthly Pass (NPR 7,500)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Shift, Payment Status & Advance Payment Selection */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Shift Slot *</label>
-                  <select
-                    value={reservationForm.shift}
-                    onChange={e => setReservationForm({ ...reservationForm, shift: e.target.value })}
-                    style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
-                  >
-                    <option value="FULL_DAY">Full Day (07:00 AM - 10:00 PM)</option>
-                    <option value="MORNING">Morning Shift (07:00 AM - 12:00 PM)</option>
-                    <option value="AFTERNOON">Afternoon Shift (12:00 PM - 05:00 PM)</option>
-                    <option value="EVENING">Evening Shift (05:00 PM - 10:00 PM)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Payment Status *</label>
-                  <select
-                    value={reservationForm.paymentStatus}
-                    onChange={e => {
-                      const newStatus = e.target.value;
-                      const feeInfo = calculateFee({
-                        passType: reservationForm.passType,
-                        hasLocker: reservationForm.hasLocker,
-                        seatId: reservationForm.seatId
-                      });
-                      const total = feeInfo.totalAmount;
-                      const newAdvance = newStatus === 'PAID' ? total : (newStatus === 'PENDING' ? 0 : reservationForm.advanceAmount);
-                      setReservationForm({
-                        ...reservationForm,
-                        paymentStatus: newStatus,
-                        advanceAmount: newAdvance,
-                        amountPaid: newAdvance,
-                        pendingAmount: Math.max(0, total - newAdvance)
-                      });
-                    }}
-                    style={{
-                      width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box', fontWeight: 700,
-                      color: reservationForm.paymentStatus === 'PAID' ? '#047857' : (reservationForm.paymentStatus === 'PARTIAL' ? '#D97706' : '#B45309')
-                    }}
-                  >
-                    <option value="PAID">PAID (Full Payment)</option>
-                    <option value="PARTIAL">PARTIAL (Advance Paid)</option>
-                    <option value="PENDING">PENDING (Unpaid / Deferred)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Advance Paid (NPR)</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={reservationForm.advanceAmount === 0 ? '' : reservationForm.advanceAmount}
-                    onChange={e => {
-                      const val = Math.max(0, Number(e.target.value.replace(/[^0-9]/g, '')) || 0);
-                      const feeInfo = calculateFee({
-                        passType: reservationForm.passType,
-                        hasLocker: reservationForm.hasLocker,
-                        seatId: reservationForm.seatId
-                      });
-                      const total = feeInfo.totalAmount;
-                      const pending = Math.max(0, total - val);
-                      let status = 'PENDING';
-                      if (val >= total) status = 'PAID';
-                      else if (val > 0) status = 'PARTIAL';
-
-                      setReservationForm({
-                        ...reservationForm,
-                        advanceAmount: val,
-                        amountPaid: val,
-                        pendingAmount: pending,
-                        paymentStatus: status
-                      });
-                    }}
-                    placeholder="0"
-                    style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box', fontWeight: 700 }}
-                  />
-                </div>
-              </div>
-
-              {/* Locker Option & Real-time Fee Summary */}
-              {(() => {
-                const feeInfo = calculateFee({
-                  passType: reservationForm.passType,
-                  hasLocker: reservationForm.hasLocker,
-                  seatId: reservationForm.seatId
-                });
-                const total = feeInfo.totalAmount;
-                const paid = Number(reservationForm.advanceAmount || 0);
-                const pending = Math.max(0, total - paid);
-
-                return (
-                  <div style={{ backgroundColor: '#FEF3C7', padding: '0.85rem 1rem', borderRadius: '8px', border: '1px solid #FDE68A', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700, color: '#92400E' }}>
-                        <input
-                          type="checkbox"
-                          checked={reservationForm.hasLocker}
-                          onChange={e => {
-                            const newHasLocker = e.target.checked;
-                            const newFeeInfo = calculateFee({
-                              passType: reservationForm.passType,
-                              hasLocker: newHasLocker,
-                              seatId: reservationForm.seatId
-                            });
-                            const newTotal = newFeeInfo.totalAmount;
-                            const currentAdvance = reservationForm.advanceAmount;
-                            const newPending = Math.max(0, newTotal - currentAdvance);
-                            let newStatus = reservationForm.paymentStatus;
-                            if (currentAdvance >= newTotal) newStatus = 'PAID';
-                            else if (currentAdvance > 0) newStatus = 'PARTIAL';
-                            else newStatus = 'PENDING';
-
-                            setReservationForm({
-                              ...reservationForm,
-                              hasLocker: newHasLocker,
-                              totalAmount: newTotal,
-                              pendingAmount: newPending,
-                              paymentStatus: newStatus
-                            });
-                          }}
-                        />
-                        <span>Include Storage Locker (+NPR {reservationForm.passType === 'MONTHLY' ? '1,000' : reservationForm.passType === 'WEEKLY' ? '300' : '200'})</span>
-                      </label>
-
-                      <div style={{ textAlign: 'right' }}>
-                        <span style={{ fontSize: '0.75rem', color: '#B45309', display: 'block' }}>
-                          Base: NPR {feeInfo.basePrice} {feeInfo.lockerFee > 0 ? `+ Locker: NPR ${feeInfo.lockerFee}` : ''}
-                        </span>
-                        <strong style={{ fontSize: '1.1rem', color: '#78350F' }}>
-                          Total Fee: NPR {total}
-                        </strong>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', paddingTop: '0.4rem', borderTop: '1px dashed #F59E0B' }}>
-                      <div>
-                        <span style={{ color: '#92400E', fontWeight: 600 }}>Advance Paid: </span>
-                        <strong style={{ color: '#047857' }}>NPR {paid}</strong>
-                      </div>
-                      <div>
-                        <span style={{ color: '#92400E', fontWeight: 600 }}>Remaining Balance Due: </span>
-                        <strong style={{ color: pending > 0 ? '#DC2626' : '#047857', fontWeight: 800 }}>
-                          NPR {pending} {pending === 0 ? '(Cleared)' : `(${reservationForm.paymentStatus})`}
-                        </strong>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowReservationModal(false)}
-                  style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => handleAdminReservationSubmit(e, 'RESERVE')}
-                  style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: '1px solid #D97706', backgroundColor: '#FFFBEB', color: '#B45309', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
-                >
-                  🟡 Hold as Reservation
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => handleAdminReservationSubmit(e, 'BOOK')}
-                  style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: 'none', backgroundColor: '#059669', color: '#FFFFFF', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
-                >
-                  🟢 Book Cabin (Instant Check-In)
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ==================== MODAL 4: EDIT BOOKING DETAILS ==================== */}
       {showEditBookingModal && selectedBookingForEdit && (
@@ -4738,7 +4513,7 @@ export const AdminPage = () => {
                 <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Edit3 size={18} /> Modify Booking Reservation
                 </h3>
-                <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>Code: {selectedBookingForEdit.bookingCode} • {selectedBookingForEdit.userName}</div>
+                <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>Code: {selectedBookingForEdit.bookingCode} Ã¢â‚¬Â¢ {selectedBookingForEdit.userName}</div>
               </div>
               <button onClick={() => setShowEditBookingModal(false)} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '0.2rem' }}>
                 <X size={20} />
@@ -4787,9 +4562,11 @@ export const AdminPage = () => {
                         hasLocker: editBookingForm.hasLocker,
                         seatId: editBookingForm.seatId
                       });
+                      const computedEnd = calculateExpectedAdminEndDate(editBookingForm.startDate, newPassType);
                       setEditBookingForm({
                         ...editBookingForm,
                         passType: newPassType,
+                        endDate: computedEnd,
                         totalAmount: feeInfo.totalAmount
                       });
                     }}
@@ -4802,19 +4579,58 @@ export const AdminPage = () => {
                 </div>
               </div>
 
+              {/* Start Date & Expiry / End Date */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Start Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={editBookingForm.startDate || ''}
+                    onChange={e => {
+                      const newStart = e.target.value;
+                      const computedEnd = calculateExpectedAdminEndDate(newStart, editBookingForm.passType);
+                      setEditBookingForm({
+                        ...editBookingForm,
+                        startDate: newStart,
+                        endDate: computedEnd
+                      });
+                    }}
+                    style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Valid Until / Expiry Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={editBookingForm.endDate || ''}
+                    onChange={e => setEditBookingForm({ ...editBookingForm, endDate: e.target.value })}
+                    style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+
               {/* Shift & Time */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
                   <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.35rem' }}>Shift</label>
                   <select
                     value={editBookingForm.shift}
-                    onChange={e => setEditBookingForm({ ...editBookingForm, shift: e.target.value })}
+                    onChange={e => {
+                      const sh = e.target.value;
+                      let timing = '06:00 AM - 09:00 PM';
+                      if (sh === 'MORNING') timing = '06:00 AM - 12:00 PM';
+                      else if (sh === 'AFTERNOON') timing = '12:00 PM - 05:00 PM';
+                      else if (sh === 'EVENING') timing = '05:00 PM - 09:00 PM';
+                      setEditBookingForm({ ...editBookingForm, shift: sh, bookingTime: timing });
+                    }}
                     style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
                   >
-                    <option value="FULL_DAY">Full Day</option>
-                    <option value="MORNING">Morning Shift</option>
-                    <option value="AFTERNOON">Afternoon Shift</option>
-                    <option value="EVENING">Evening Shift</option>
+                    <option value="FULL_DAY">Full Day (06:00 AM - 09:00 PM)</option>
+                    <option value="MORNING">Morning Shift (06:00 AM - 12:00 PM)</option>
+                    <option value="AFTERNOON">Afternoon Shift (12:00 PM - 05:00 PM)</option>
+                    <option value="EVENING">Evening Shift (05:00 PM - 09:00 PM)</option>
                   </select>
                 </div>
 
@@ -4838,11 +4654,13 @@ export const AdminPage = () => {
                     onChange={e => setEditBookingForm({ ...editBookingForm, status: e.target.value })}
                     style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', boxSizing: 'border-box' }}
                   >
-                    <option value="PENDING_CONFIRMATION">Pending Confirmation</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="APPROVED">Approved (Reserved)</option>
                     <option value="CONFIRMED">Confirmed</option>
                     <option value="CHECKED_IN">Checked In (Occupied)</option>
                     <option value="COMPLETED">Completed</option>
                     <option value="CANCELLED">Cancelled</option>
+                    <option value="REJECTED">Rejected</option>
                   </select>
                 </div>
 
@@ -5024,7 +4842,7 @@ export const AdminPage = () => {
                       <span style={{ color: '#475569', fontWeight: 600 }}>Amount Paid: <strong style={{ color: '#047857' }}>NPR {paid}</strong></span>
                       <span style={{ color: '#475569', fontWeight: 600 }}>Remaining Balance Due: </span>
                       <strong style={{ color: pending === 0 ? '#059669' : (editBookingForm.paymentStatus === 'PARTIAL' ? '#D97706' : '#DC2626'), fontWeight: 800 }}>
-                        {pending === 0 ? 'NPR 0 (Paid in Full ✓)' : `NPR ${pending} (${editBookingForm.paymentStatus})`}
+                        {pending === 0 ? 'NPR 0 (Paid in Full Ã¢Å“â€œ)' : `NPR ${pending} (${editBookingForm.paymentStatus})`}
                       </strong>
                     </div>
                   </div>
@@ -5133,7 +4951,7 @@ export const AdminPage = () => {
                     checked={packageForm.popular}
                     onChange={e => setPackageForm({ ...packageForm, popular: e.target.checked })}
                   />
-                  <span>⭐ Mark as Most Popular Package</span>
+                  <span>Ã¢Â­Â Mark as Most Popular Package</span>
                 </label>
               </div>
 
@@ -5254,7 +5072,7 @@ export const AdminPage = () => {
                             fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', textAlign: 'center'
                           }}
                         >
-                          💰 Full Settlement<br />
+                          Ã°Å¸â€™Â° Full Settlement<br />
                           <span style={{ fontSize: '0.7rem', fontWeight: 600 }}>NPR {currentPending.toLocaleString()}</span>
                         </button>
 
@@ -5273,7 +5091,7 @@ export const AdminPage = () => {
                             fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', textAlign: 'center'
                           }}
                         >
-                          💳 Partial Payment<br />
+                          Ã°Å¸â€™Â³ Partial Payment<br />
                           <span style={{ fontSize: '0.7rem', fontWeight: 600 }}>Custom Advance / Installment</span>
                         </button>
                       </div>
@@ -5322,7 +5140,7 @@ export const AdminPage = () => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.4rem', marginTop: '0.2rem', borderTop: '1px dashed #CBD5E1' }}>
                         <span style={{ fontWeight: 800, color: '#0F172A' }}>Remaining Left Amount:</span>
                         <strong style={{ fontSize: '0.95rem', fontWeight: 800, color: remainingLeft === 0 ? '#047857' : '#D97706' }}>
-                          {remainingLeft === 0 ? 'Nil ✓ (Fully Paid)' : `NPR ${remainingLeft.toLocaleString()}`}
+                          {remainingLeft === 0 ? 'Nil Ã¢Å“â€œ (Fully Paid)' : `NPR ${remainingLeft.toLocaleString()}`}
                         </strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.4rem' }}>
@@ -5632,19 +5450,22 @@ export const AdminPage = () => {
         </div>
       )}
 
-      {/* ==================== WALK-IN STUDENT ADMISSION MODAL ==================== */}
-      <WalkinStudentModal
-        isOpen={showWalkinStudentModal}
+      {/* ==================== UNIFIED REGISTER STUDENT MODAL ==================== */}
+      <RegisterNewStudentModal
+        isOpen={showRegisterStudentModal}
         onClose={() => {
-          setShowWalkinStudentModal(false);
-          setPreselectedSeatForWalkin(null);
+          setShowRegisterStudentModal(false);
+          setPreselectedBookingForRegister(null);
+          setPreselectedSeatForRegister(null);
         }}
-        seats={seats}
-        lockers={lockers}
-        plans={plans}
-        preselectedSeat={preselectedSeatForWalkin}
-        onSubmitSuccess={handleWalkinStudentRegistration}
+        preselectedBooking={preselectedBookingForRegister}
+        preselectedSeat={preselectedSeatForRegister}
+        onSuccess={() => {}}
       />
+
+
+      {/* Walk-in modal removed â€” replaced by RegisterNewStudentModal */}
+
 
       {/* ==================== REGISTRATION RECEIPT VOUCHER MODAL ==================== */}
       <RegistrationReceiptModal
@@ -5666,7 +5487,7 @@ export const AdminPage = () => {
         onAssignStudent={async (seat, student, mode, bookingDetails = {}) => {
           try {
             const {
-              passType = 'DAILY', shift = 'FULL_DAY', shiftTime = '07:00 AM – 10:00 PM',
+              passType = 'DAILY', shift = 'FULL_DAY', shiftTime = '06:00 AM Ã¢â‚¬â€œ 09:00 PM',
               startDate = new Date().toISOString().split('T')[0],
               endDate = new Date().toISOString().split('T')[0],
               hasLocker = false, lockerNumber = '',
@@ -5693,7 +5514,7 @@ export const AdminPage = () => {
             });
 
             if (dupBooking) {
-              alert(`⚠️ Scholar "${displayName}" already holds an active desk (Desk ${dupBooking.seatNumber}, valid until ${dupBooking.endDate || 'active'}). A student cannot hold multiple active desks simultaneously.`);
+              alert(`Ã¢Å¡Â Ã¯Â¸Â Scholar "${displayName}" already holds an active desk (Desk ${dupBooking.seatNumber}, valid until ${dupBooking.endDate || 'active'}). A student cannot hold multiple active desks simultaneously.`);
               return;
             }
 
@@ -5765,7 +5586,7 @@ export const AdminPage = () => {
               membershipStatus: 'ACTIVE'
             });
 
-            alert(`✅ Desk ${seat.seatNumber} assigned to ${displayName}!\nBooking Code: ${bookingCode}\nTotal: NPR ${Number(totalAmount).toLocaleString()}${Number(pendingAmount) > 0 ? `\n⚠ Due: NPR ${Number(pendingAmount).toLocaleString()}` : ' (Fully Paid)'}`);
+            alert(`Ã¢Å“â€¦ Desk ${seat.seatNumber} assigned to ${displayName}!\nBooking Code: ${bookingCode}\nTotal: NPR ${Number(totalAmount).toLocaleString()}${Number(pendingAmount) > 0 ? `\nÃ¢Å¡Â  Due: NPR ${Number(pendingAmount).toLocaleString()}` : ' (Fully Paid)'}`);
           } catch (err) {
             console.error('Error assigning student:', err);
             alert('Failed to assign student: ' + err.message);
@@ -5810,7 +5631,7 @@ export const AdminPage = () => {
             } else {
               await changeSeatStatus(seat.id, 'AVAILABLE');
             }
-            alert(`✅ Desk #${seat.seatNumber} is now AVAILABLE and occupant marked INACTIVE.`);
+            alert(`Ã¢Å“â€¦ Desk #${seat.seatNumber} is now AVAILABLE and occupant marked INACTIVE.`);
           } catch (err) {
             console.error('Error releasing cabin:', err);
             alert('Failed to release cabin: ' + err.message);
@@ -5818,8 +5639,9 @@ export const AdminPage = () => {
         }}
         onOpenWalkinForCabin={(seat) => {
           setShowCabinStudentModal(false);
-          setPreselectedSeatForWalkin(seat);
-          setShowWalkinStudentModal(true);
+          setPreselectedSeatForRegister(seat);
+          setPreselectedBookingForRegister(null);
+          setShowRegisterStudentModal(true);
         }}
       />
 
@@ -5834,7 +5656,7 @@ export const AdminPage = () => {
         onAssignLocker={async (lockerId, assignmentData) => {
           try {
             await assignLocker(lockerId, assignmentData);
-            alert(`✅ ${selectedLockerForModal?.label || selectedLockerForModal?.lockerNumber} successfully assigned to ${assignmentData.userName}!`);
+            alert(`Ã¢Å“â€¦ ${selectedLockerForModal?.label || selectedLockerForModal?.lockerNumber} successfully assigned to ${assignmentData.userName}!`);
           } catch (err) {
             console.error('Error assigning locker:', err);
             alert('Failed to assign locker: ' + err.message);
@@ -5843,7 +5665,7 @@ export const AdminPage = () => {
         onReleaseLocker={async (lockerId) => {
           try {
             await releaseLocker(lockerId);
-            alert(`✅ ${selectedLockerForModal?.label || selectedLockerForModal?.lockerNumber} is now set back to AVAILABLE.`);
+            alert(`Ã¢Å“â€¦ ${selectedLockerForModal?.label || selectedLockerForModal?.lockerNumber} is now set back to AVAILABLE.`);
           } catch (err) {
             console.error('Error releasing locker:', err);
             alert('Failed to release locker: ' + err.message);
@@ -5852,7 +5674,7 @@ export const AdminPage = () => {
         onUpdateStatus={async (lockerId, status, details) => {
           try {
             await updateLockerStatus(lockerId, status, details);
-            alert(`✅ ${selectedLockerForModal?.label || selectedLockerForModal?.lockerNumber} status updated to ${status}.`);
+            alert(`Ã¢Å“â€¦ ${selectedLockerForModal?.label || selectedLockerForModal?.lockerNumber} status updated to ${status}.`);
           } catch (err) {
             console.error('Error updating locker status:', err);
             alert('Failed to update status: ' + err.message);

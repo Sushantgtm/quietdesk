@@ -169,7 +169,7 @@ export const SeatMap = () => {
                       <span style={{ fontSize: '1.4rem' }}>{meta.icon}</span>
                       <div>
                         <div style={{ fontWeight: 700, color: meta.color, fontSize: '1rem' }}>{zone}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>NPR {meta.rate}/day · {zoneSeats.length} desks</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{zoneSeats.length} desks</div>
                       </div>
                     </div>
                     <div style={{

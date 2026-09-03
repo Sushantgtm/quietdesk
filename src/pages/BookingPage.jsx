@@ -25,6 +25,26 @@ export const BookingPage = () => {
 
   const todayLocalDate = getTodayLocalDateStr();
 
+  // Helper to calculate expected expiry date based on start date and pass tier (timezone safe)
+  const calculateExpectedEndDate = (startStr, passType) => {
+    if (!startStr) return '';
+    const parts = startStr.split('-').map(Number);
+    if (parts.length !== 3 || isNaN(parts[0])) return startStr;
+    const date = new Date(parts[0], parts[1] - 1, parts[2]);
+    const pt = (passType || '').toUpperCase();
+    if (pt === 'DAILY' || pt === 'DAY') {
+      return startStr;
+    } else if (pt === 'WEEKLY' || pt === 'WEEK') {
+      date.setDate(date.getDate() + 7);
+    } else if (pt === 'MONTHLY' || pt === 'MONTH') {
+      date.setDate(date.getDate() + 30);
+    }
+    const yr = date.getFullYear();
+    const mo = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${day}`;
+  };
+
   // Helper to compute next 15-minute slot for current local time
   const getNext15MinSlot = (date = new Date()) => {
     const d = new Date(date);
@@ -34,7 +54,10 @@ export const BookingPage = () => {
     }
     let hour = d.getHours();
     const min = d.getMinutes();
-    if (hour < 5) hour = 5;
+    if (hour < 6) hour = 6;
+    if (hour > 21 || (hour === 21 && min > 0)) {
+      return '06:00 AM';
+    }
     const period = hour >= 12 ? 'PM' : 'AM';
     const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
     const displayMin = min < 10 ? `0${min}` : min;
@@ -70,12 +93,12 @@ export const BookingPage = () => {
   const [confirmedBooking, setConfirmedBooking] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Generate 15-minute time slots from 05:00 AM to 10:00 PM
+  // Generate 15-minute time slots from 06:00 AM to 09:00 PM (Opening: 6 AM, Closing: 9 PM)
   const allTimeSlots = useMemo(() => {
     const slots = [];
-    for (let hour = 5; hour <= 22; hour++) {
+    for (let hour = 6; hour <= 21; hour++) {
       for (let min = 0; min < 60; min += 15) {
-        if (hour === 22 && min > 0) break; // Stop at 10:00 PM
+        if (hour === 21 && min > 0) break; // Stop strictly at 09:00 PM
         const period = hour >= 12 ? 'PM' : 'AM';
         const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
         const displayMin = min < 10 ? `0${min}` : min;
@@ -145,7 +168,7 @@ export const BookingPage = () => {
     return calculateBasePrice() + getLockerFee();
   };
 
-  const finalArrivalTime = isCustomTime ? (customArrivalTime || '07:00 AM') : arrivalTime;
+  const finalArrivalTime = isCustomTime ? (customArrivalTime || '06:00 AM') : arrivalTime;
 
   const handleNextStep = (e) => {
     e.preventDefault();
@@ -175,6 +198,7 @@ export const BookingPage = () => {
   const handleConfirmBooking = async () => {
     setSubmitting(true);
     try {
+      const calculatedEndDate = calculateExpectedEndDate(startDate, selectedPassType);
       const booking = await createBooking({
         seatId: selectedSeatObj.id,
         seatNumber: selectedSeatObj.seatNumber,
@@ -183,14 +207,14 @@ export const BookingPage = () => {
         hasLocker: includeLocker && selectedPassType !== 'DAILY',
         lockerFee: getLockerFee(),
         startDate: startDate,
-        endDate: startDate,
+        endDate: calculatedEndDate,
         arrivalTime: finalArrivalTime,
         bookingTime: finalArrivalTime,
         userName: formData.userName,
         userEmail: formData.userEmail,
         userPhone: formData.userPhone,
         totalAmount: calculateTotal(),
-        status: 'PENDING_CONFIRMATION',
+        status: 'PENDING',
         bookingType: 'WEBSITE_BOOKING'
       });
       setConfirmedBooking(booking);
@@ -624,7 +648,7 @@ export const BookingPage = () => {
                         >
                           {availableTimeSlots.map((slot) => (
                             <option key={slot} value={slot}>
-                              {slot} {slot === '05:00 AM' || slot === '06:00 AM' ? '(Opening)' : slot === '10:00 PM' ? '(Closing)' : ''}
+                              {slot} {slot === '06:00 AM' ? '(Opening)' : slot === '09:00 PM' ? '(Closing)' : ''}
                             </option>
                           ))}
                         </select>
@@ -634,7 +658,7 @@ export const BookingPage = () => {
                       {startDate === todayLocalDate ? (
                         <span>Showing real-time slots available from <strong>{availableTimeSlots[0]}</strong> onward today.</span>
                       ) : (
-                        <span>Operating hours: 05:00 AM – 10:00 PM (15 min increments)</span>
+                        <span>Operating hours: 06:00 AM – 09:00 PM (15 min increments)</span>
                       )}
                     </div>
                   </div>
@@ -691,6 +715,16 @@ export const BookingPage = () => {
                     </div>
                   </div>
                   <div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Start Date</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 600 }}>{startDate}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Valid Until / Expiry</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--accent-hover)' }}>
+                      📅 {calculateExpectedEndDate(startDate, selectedPassType)} ({selectedPassType === 'WEEKLY' ? '7 Days' : selectedPassType === 'MONTHLY' ? '30 Days' : '1 Day'})
+                    </div>
+                  </div>
+                  <div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Scholar Name</div>
                     <div style={{ fontSize: '1rem', fontWeight: 600 }}>{formData.userName}</div>
                   </div>
@@ -701,10 +735,6 @@ export const BookingPage = () => {
                   <div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Phone Number</div>
                     <div style={{ fontSize: '1rem', fontWeight: 600 }}>{formData.userPhone}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Start Date</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 600 }}>{startDate}</div>
                   </div>
                 </div>
 
@@ -839,6 +869,16 @@ export const BookingPage = () => {
                     <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>Key Locker Access</div>
                     <div style={{ fontSize: '0.95rem', fontWeight: 700, color: confirmedBooking.hasLocker ? 'var(--accent)' : 'rgba(255,255,255,0.8)' }}>
                       {confirmedBooking.hasLocker ? '🔒 Key Locker Included' : 'Not Included'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>Start Date</div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#FFFFFF' }}>{confirmedBooking.startDate}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>Valid Until / Expiry</div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--accent)' }}>
+                      📅 {confirmedBooking.endDate || calculateExpectedEndDate(confirmedBooking.startDate, confirmedBooking.passType)}
                     </div>
                   </div>
                   {/* Total Amount hidden per owner's request — data retained */}
