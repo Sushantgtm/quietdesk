@@ -57,35 +57,47 @@ export const StudentProfileModal = ({
   // Filter bookings for this student
   const userBookings = useMemo(() => {
     if (!user) return [];
-    return bookings
-      .filter(b => b.userId === user.id || b.userEmail === user.email || (b.userPhone && user.phone && b.userPhone.replace(/\D/g, '') === user.phone.replace(/\D/g, '')))
+    const cleanUserPhone = String(user.phone || '').replace(/\D/g, '');
+    const cleanUserEmail = String(user.email || '').trim().toLowerCase();
+    const userId = user.id;
+
+    return (bookings || [])
+      .filter(b => {
+        if (!b) return false;
+        if (userId && b.userId && b.userId === userId) return true;
+        if (cleanUserEmail && b.userEmail && String(b.userEmail).trim().toLowerCase() === cleanUserEmail) return true;
+        if (cleanUserPhone && b.userPhone && String(b.userPhone).replace(/\D/g, '') === cleanUserPhone) return true;
+        return false;
+      })
       .sort((a, b) => new Date(b.createdAt || b.startDate || 0) - new Date(a.createdAt || a.startDate || 0));
   }, [user, bookings]);
 
   // Current active or confirmed booking
   const activeBooking = useMemo(() =>
-    userBookings.find(b => ['CONFIRMED', 'CHECKED_IN', 'APPROVED', 'RESERVED'].includes(b.status)),
+    userBookings.find(b => ['CONFIRMED', 'CHECKED_IN', 'APPROVED', 'RESERVED', 'ACTIVE'].includes(b.status)),
     [userBookings]
   );
 
   // Assigned locker (max 1 active locker)
-  const assignedLocker = useMemo(() =>
-    lockers.find(l =>
+  const assignedLocker = useMemo(() => {
+    if (!user) return null;
+    const cleanUserPhone = String(user.phone || '').replace(/\D/g, '');
+    return (lockers || []).find(l =>
       l.status === 'ASSIGNED' &&
-      (l.assignedToUserId === user?.id || (l.assignedToUserPhone && user?.phone && l.assignedToUserPhone.replace(/\D/g, '') === user?.phone.replace(/\D/g, '')))
-    ),
-    [lockers, user]
-  );
+      ((user.id && l.assignedToUserId === user.id) ||
+       (cleanUserPhone && l.assignedToUserPhone && String(l.assignedToUserPhone).replace(/\D/g, '') === cleanUserPhone))
+    );
+  }, [lockers, user]);
 
   // Active seat details
   const activeSeat = useMemo(() =>
-    activeBooking ? seats.find(s => s.id === activeBooking.seatId || s.seatNumber === activeBooking.seatNumber) : null,
+    activeBooking ? (seats || []).find(s => s.id === activeBooking.seatId || s.seatNumber === activeBooking.seatNumber) : null,
     [activeBooking, seats]
   );
 
   // Available seats for changing cabin
   const availableSeats = useMemo(() =>
-    seats.filter(s => s.status === 'AVAILABLE'),
+    (seats || []).filter(s => s.status === 'AVAILABLE'),
     [seats]
   );
 
@@ -106,7 +118,13 @@ export const StudentProfileModal = ({
   if (!user) return null;
 
   const displayName = user.fullName || user.name || 'Scholar';
-  const initials = displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || 'S';
+  const initials = String(displayName)
+    .trim()
+    .split(/\s+/)
+    .map(w => w[0] || '')
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || 'S';
   const todayStr = new Date().toISOString().split('T')[0];
 
   const daysRemaining = activeBooking?.endDate ? calculateDaysRemaining(activeBooking.endDate) : null;
@@ -241,7 +259,7 @@ export const StudentProfileModal = ({
   return (
     <div style={{
       position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.75)', backdropFilter: 'blur(6px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '1rem'
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem'
     }}>
       <div style={{
         backgroundColor: '#FFFFFF', borderRadius: '20px', width: '100%', maxWidth: '820px',

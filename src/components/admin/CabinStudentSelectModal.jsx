@@ -10,13 +10,15 @@ export const CabinStudentSelectModal = ({
   isOpen,
   onClose,
   cabinSeat,
+  users: propUsers,
   onAssignStudent,
   onReleaseCabin,
   onOpenWalkinForCabin,
   onViewProfile
 }) => {
   const bookingCtx = useBooking() || {};
-  const { users = [], bookings = [], seats = [], lockers = [], updateBookingDetails, assignLocker } = bookingCtx;
+  const users = (propUsers && propUsers.length > 0) ? propUsers : (bookingCtx.users || []);
+  const { bookings = [], seats = [], lockers = [], updateBookingDetails, assignLocker } = bookingCtx;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -101,40 +103,77 @@ export const CabinStudentSelectModal = ({
   };
 
   // ── Occupancy check for this specific cabin ──
-  const currentOccupantBooking = (bookings || []).find(b =>
-    (b?.seatId === cabinSeat.id || b?.seatNumber === cabinSeat.seatNumber) &&
-    ['CHECKED_IN', 'OCCUPIED', 'RESERVED', 'CONFIRMED'].includes(b?.status)
-  );
+  const seatNumClean = String(cabinSeat?.seatNumber || '').trim().replace(/^Desk\s*/i, '');
+  const currentOccupantBooking = (bookings || []).find(b => {
+    if (!b) return false;
+    const bSeatClean = String(b.seatNumber || '').trim().replace(/^Desk\s*/i, '');
+    const isSeatMatch = (b.seatId && (b.seatId === cabinSeat.id || b.seatId === `seat_${seatNumClean}`)) ||
+                        (seatNumClean && bSeatClean === seatNumClean);
+    const isOccupiedStatus = ['CHECKED_IN', 'OCCUPIED', 'RESERVED', 'CONFIRMED', 'ACTIVE', 'APPROVED'].includes(b.status);
+    return isSeatMatch && isOccupiedStatus;
+  });
   const isCabinBusy = cabinSeat.status === 'OCCUPIED' || cabinSeat.status === 'RESERVED' || !!currentOccupantBooking;
 
   // ── Helper: resolve student user from booking or users array ──
   const resolveOccupantUser = () => {
-    // First try to match from users array
-    const fromUsers = (users || []).find(u =>
-      (currentOccupantBooking && (
-        u.id === currentOccupantBooking.userId ||
-        (u.phone && currentOccupantBooking.userPhone && u.phone.replace(/\D/g, '') === currentOccupantBooking.userPhone.replace(/\D/g, ''))
-      )) ||
-      u.seatNumber === cabinSeat.seatNumber ||
-      u.seatId === cabinSeat.id ||
-      u.assignedSeat === cabinSeat.seatNumber
-    );
-    if (fromUsers) return fromUsers;
-    // Fallback: build from booking data
+    // 1. First try to match from current occupant booking
     if (currentOccupantBooking) {
+      const bPhoneClean = String(currentOccupantBooking.userPhone || '').replace(/\D/g, '');
+      const bEmailClean = String(currentOccupantBooking.userEmail || '').trim().toLowerCase();
+      const bUserId = currentOccupantBooking.userId;
+
+      const fromUsers = (users || []).find(u =>
+        (bUserId && u.id === bUserId) ||
+        (bPhoneClean && u.phone && String(u.phone).replace(/\D/g, '') === bPhoneClean) ||
+        (bEmailClean && u.email && String(u.email).trim().toLowerCase() === bEmailClean)
+      );
+      if (fromUsers) return fromUsers;
+
+      // Synthesize full user from booking data
       return {
-        id: currentOccupantBooking.userId,
-        userCode: currentOccupantBooking.userCode,
-        fullName: currentOccupantBooking.userName,
-        phone: currentOccupantBooking.userPhone,
-        email: currentOccupantBooking.userEmail,
-        address: currentOccupantBooking.userAddress,
-        seatId: currentOccupantBooking.seatId,
-        seatNumber: currentOccupantBooking.seatNumber,
-        passType: currentOccupantBooking.passType,
-        status: 'ACTIVE'
+        id: bUserId || `usr_${currentOccupantBooking.id}`,
+        userCode: currentOccupantBooking.userCode || `QD-STU-${Math.floor(1000 + Math.random() * 9000)}`,
+        fullName: currentOccupantBooking.userName || 'Assigned Scholar',
+        name: currentOccupantBooking.userName || 'Assigned Scholar',
+        phone: currentOccupantBooking.userPhone || '',
+        email: currentOccupantBooking.userEmail || '',
+        address: currentOccupantBooking.userAddress || 'Kathmandu, Nepal',
+        seatId: currentOccupantBooking.seatId || cabinSeat.id,
+        seatNumber: currentOccupantBooking.seatNumber || seatNumClean,
+        assignedSeat: `Desk ${currentOccupantBooking.seatNumber || seatNumClean}`,
+        passType: currentOccupantBooking.passType || 'DAILY',
+        status: 'ACTIVE',
+        membershipStatus: 'ACTIVE'
       };
     }
+
+    // 2. Direct lookup by seat in users array
+    const directUser = (users || []).find(u => {
+      const uSeatClean = String(u.seatNumber || u.assignedSeat || '').trim().replace(/^Desk\s*/i, '');
+      return (seatNumClean && uSeatClean === seatNumClean) ||
+             (cabinSeat.id && (u.seatId === cabinSeat.id || u.assignedSeatId === cabinSeat.id));
+    });
+    if (directUser) return directUser;
+
+    // 3. Occupant data directly on cabinSeat
+    if (cabinSeat.assignedToUserId || cabinSeat.currentStudentName || cabinSeat.studentName) {
+      return {
+        id: cabinSeat.assignedToUserId || `usr_seat_${cabinSeat.id}`,
+        userCode: cabinSeat.userCode || `QD-STU-${Math.floor(1000 + Math.random() * 9000)}`,
+        fullName: cabinSeat.currentStudentName || cabinSeat.studentName || 'Assigned Scholar',
+        name: cabinSeat.currentStudentName || cabinSeat.studentName || 'Assigned Scholar',
+        phone: cabinSeat.studentPhone || cabinSeat.userPhone || '',
+        email: cabinSeat.studentEmail || cabinSeat.userEmail || '',
+        address: 'Kathmandu, Nepal',
+        seatId: cabinSeat.id,
+        seatNumber: seatNumClean,
+        assignedSeat: `Desk ${seatNumClean}`,
+        passType: cabinSeat.passType || 'DAILY',
+        status: 'ACTIVE',
+        membershipStatus: 'ACTIVE'
+      };
+    }
+
     return null;
   };
 

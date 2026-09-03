@@ -2660,19 +2660,25 @@ export const AdminPage = () => {
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    const u = users.find(usr => 
-                                      usr.id === activeBooking?.userId ||
-                                      (usr.phone && activeBooking?.userPhone && usr.phone.replace(/\D/g, '') === activeBooking.userPhone.replace(/\D/g, ''))
+                                    const cleanPhone = String(activeBooking?.userPhone || '').replace(/\D/g, '');
+                                    const cleanEmail = String(activeBooking?.userEmail || '').trim().toLowerCase();
+                                    const u = allUnifiedUsers.find(usr => 
+                                      (activeBooking?.userId && usr.id === activeBooking.userId) ||
+                                      (cleanPhone && usr.phone && String(usr.phone).replace(/\D/g, '') === cleanPhone) ||
+                                      (cleanEmail && usr.email && String(usr.email).trim().toLowerCase() === cleanEmail)
                                     ) || {
-                                      id: activeBooking?.userId,
-                                      userCode: activeBooking?.userCode,
-                                      fullName: activeBooking?.userName,
-                                      phone: activeBooking?.userPhone,
-                                      email: activeBooking?.userEmail,
+                                      id: activeBooking?.userId || `usr_${seat.id}`,
+                                      userCode: activeBooking?.userCode || `QD-STU-${seat.seatNumber}`,
+                                      fullName: activeBooking?.userName || 'Assigned Scholar',
+                                      name: activeBooking?.userName || 'Assigned Scholar',
+                                      phone: activeBooking?.userPhone || '',
+                                      email: activeBooking?.userEmail || '',
                                       seatId: seat.id,
                                       seatNumber: seat.seatNumber,
-                                      passType: activeBooking?.passType,
-                                      status: 'ACTIVE'
+                                      assignedSeat: `Desk ${seat.seatNumber}`,
+                                      passType: activeBooking?.passType || 'DAILY',
+                                      status: 'ACTIVE',
+                                      membershipStatus: 'ACTIVE'
                                     };
                                     setSelectedUserForProfile(u);
                                   }}
@@ -2809,19 +2815,25 @@ export const AdminPage = () => {
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          const u = users.find(usr => 
-                                            usr.id === activeBooking?.userId ||
-                                            (usr.phone && activeBooking?.userPhone && usr.phone.replace(/\D/g, '') === activeBooking.userPhone.replace(/\D/g, ''))
+                                          const cleanPhone = String(activeBooking?.userPhone || '').replace(/\D/g, '');
+                                          const cleanEmail = String(activeBooking?.userEmail || '').trim().toLowerCase();
+                                          const u = allUnifiedUsers.find(usr => 
+                                            (activeBooking?.userId && usr.id === activeBooking.userId) ||
+                                            (cleanPhone && usr.phone && String(usr.phone).replace(/\D/g, '') === cleanPhone) ||
+                                            (cleanEmail && usr.email && String(usr.email).trim().toLowerCase() === cleanEmail)
                                           ) || {
-                                            id: activeBooking?.userId,
-                                            userCode: activeBooking?.userCode,
-                                            fullName: activeBooking?.userName,
-                                            phone: activeBooking?.userPhone,
-                                            email: activeBooking?.userEmail,
+                                            id: activeBooking?.userId || `usr_${seat.id}`,
+                                            userCode: activeBooking?.userCode || `QD-STU-${seat.seatNumber}`,
+                                            fullName: activeBooking?.userName || 'Assigned Scholar',
+                                            name: activeBooking?.userName || 'Assigned Scholar',
+                                            phone: activeBooking?.userPhone || '',
+                                            email: activeBooking?.userEmail || '',
                                             seatId: seat.id,
                                             seatNumber: seat.seatNumber,
-                                            passType: activeBooking?.passType,
-                                            status: 'ACTIVE'
+                                            assignedSeat: `Desk ${seat.seatNumber}`,
+                                            passType: activeBooking?.passType || 'DAILY',
+                                            status: 'ACTIVE',
+                                            membershipStatus: 'ACTIVE'
                                           };
                                           setSelectedUserForProfile(u);
                                         }}
@@ -5471,6 +5483,7 @@ export const AdminPage = () => {
           setSelectedSeatForCabinModal(null);
         }}
         cabinSeat={selectedSeatForCabinModal}
+        users={allUnifiedUsers}
         onAssignStudent={async (seat, student, mode, bookingDetails = {}) => {
           try {
             const {
@@ -5633,7 +5646,16 @@ export const AdminPage = () => {
         onViewProfile={(studentUser) => {
           setShowCabinStudentModal(false);
           setSelectedSeatForCabinModal(null);
-          setSelectedUserForProfile(studentUser);
+          if (studentUser) {
+            const cleanPhone = String(studentUser.phone || '').replace(/\D/g, '');
+            const cleanEmail = String(studentUser.email || '').trim().toLowerCase();
+            const enriched = (allUnifiedUsers || []).find(u =>
+              (studentUser.id && u.id === studentUser.id) ||
+              (cleanPhone && u.phone && String(u.phone).replace(/\D/g, '') === cleanPhone) ||
+              (cleanEmail && u.email && String(u.email).trim().toLowerCase() === cleanEmail)
+            ) || studentUser;
+            setSelectedUserForProfile(enriched);
+          }
         }}
       />
 
