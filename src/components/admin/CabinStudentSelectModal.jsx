@@ -107,6 +107,37 @@ export const CabinStudentSelectModal = ({
   );
   const isCabinBusy = cabinSeat.status === 'OCCUPIED' || cabinSeat.status === 'RESERVED' || !!currentOccupantBooking;
 
+  // ── Helper: resolve student user from booking or users array ──
+  const resolveOccupantUser = () => {
+    // First try to match from users array
+    const fromUsers = (users || []).find(u =>
+      (currentOccupantBooking && (
+        u.id === currentOccupantBooking.userId ||
+        (u.phone && currentOccupantBooking.userPhone && u.phone.replace(/\D/g, '') === currentOccupantBooking.userPhone.replace(/\D/g, ''))
+      )) ||
+      u.seatNumber === cabinSeat.seatNumber ||
+      u.seatId === cabinSeat.id ||
+      u.assignedSeat === cabinSeat.seatNumber
+    );
+    if (fromUsers) return fromUsers;
+    // Fallback: build from booking data
+    if (currentOccupantBooking) {
+      return {
+        id: currentOccupantBooking.userId,
+        userCode: currentOccupantBooking.userCode,
+        fullName: currentOccupantBooking.userName,
+        phone: currentOccupantBooking.userPhone,
+        email: currentOccupantBooking.userEmail,
+        address: currentOccupantBooking.userAddress,
+        seatId: currentOccupantBooking.seatId,
+        seatNumber: currentOccupantBooking.seatNumber,
+        passType: currentOccupantBooking.passType,
+        status: 'ACTIVE'
+      };
+    }
+    return null;
+  };
+
   // ── Find assigned key locker for this cabin occupant ──
   const assignedLocker = (lockers || []).find(l =>
     (currentOccupantBooking && l.assignedToUserId === currentOccupantBooking.userId) ||
@@ -526,22 +557,12 @@ export const CabinStudentSelectModal = ({
                   type="button"
                   onClick={() => {
                     if (onViewProfile) {
-                      const studentUser = users.find(u =>
-                        u.id === currentOccupantBooking?.userId ||
-                        (u.phone && currentOccupantBooking?.userPhone && u.phone.replace(/\D/g, '') === currentOccupantBooking.userPhone.replace(/\D/g, ''))
-                      ) || {
-                        id: currentOccupantBooking?.userId,
-                        userCode: currentOccupantBooking?.userCode,
-                        fullName: currentOccupantBooking?.userName,
-                        phone: currentOccupantBooking?.userPhone,
-                        email: currentOccupantBooking?.userEmail,
-                        address: currentOccupantBooking?.userAddress,
-                        seatId: currentOccupantBooking?.seatId,
-                        seatNumber: currentOccupantBooking?.seatNumber,
-                        passType: currentOccupantBooking?.passType,
-                        status: 'ACTIVE'
-                      };
-                      onViewProfile(studentUser);
+                      const studentUser = resolveOccupantUser();
+                      if (studentUser) {
+                        onViewProfile(studentUser);
+                      } else {
+                        alert('Could not find student profile. The occupant data may not be linked to a user record.');
+                      }
                     }
                   }}
                   style={{
@@ -620,22 +641,12 @@ export const CabinStudentSelectModal = ({
                   type="button"
                   onClick={() => {
                     if (onViewProfile) {
-                      const studentUser = users.find(u =>
-                        u.id === currentOccupantBooking?.userId ||
-                        (u.phone && currentOccupantBooking?.userPhone && u.phone.replace(/\D/g, '') === currentOccupantBooking.userPhone.replace(/\D/g, ''))
-                      ) || {
-                        id: currentOccupantBooking?.userId,
-                        userCode: currentOccupantBooking?.userCode,
-                        fullName: currentOccupantBooking?.userName,
-                        phone: currentOccupantBooking?.userPhone,
-                        email: currentOccupantBooking?.userEmail,
-                        address: currentOccupantBooking?.userAddress,
-                        seatId: currentOccupantBooking?.seatId,
-                        seatNumber: currentOccupantBooking?.seatNumber,
-                        passType: currentOccupantBooking?.passType,
-                        status: 'ACTIVE'
-                      };
-                      onViewProfile(studentUser);
+                      const studentUser = resolveOccupantUser();
+                      if (studentUser) {
+                        onViewProfile(studentUser);
+                      } else {
+                        alert('Could not find student profile. The occupant data may not be linked to a user record.');
+                      }
                     }
                   }}
                   style={{

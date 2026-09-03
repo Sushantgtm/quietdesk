@@ -272,7 +272,7 @@ export const AdminPage = () => {
   };
 
   const handleResetAndStartFresh = async () => {
-    if (!window.confirm('…‚‚‚ Are you sure you want to remove current student bookings and reset to a clean database? This will clear stale records and initialize pristine state.')) return;
+    if (!window.confirm('⚠️ Are you sure you want to remove current student bookings and reset to a clean database? This will clear stale records and initialize pristine state.')) return;
     setIsSeeding(true);
     try {
       ['v1', 'v2', 'v3'].forEach(v => {
@@ -418,15 +418,15 @@ export const AdminPage = () => {
       const memberEmail = (reservationForm.userEmail || '').trim();
 
       if (!memberName || memberName.toLowerCase() === 'scholar') {
-        alert('…‚‚‚ Please enter a valid Member Name before creating a reservation or booking.');
+        alert('⚠️ Please enter a valid Member Name before creating a reservation or booking.');
         return;
       }
       if (!memberPhone && !memberEmail) {
-        alert('…‚‚‚ Please provide at least a Phone Number or Email Address for the member.');
+        alert('⚠️ Please provide at least a Phone Number or Email Address for the member.');
         return;
       }
       if (!reservationForm.seatId) {
-        alert('…‚‚‚ Please choose an available station / desk.');
+        alert('⚠️ Please choose an available station / desk.');
         return;
       }
 
@@ -467,7 +467,7 @@ export const AdminPage = () => {
       });
 
       if (dupBooking) {
-        alert(`…‚‚‚ Scholar "${dupBooking.userName || reservationForm.userName}" already holds an active desk (Desk ${dupBooking.seatNumber}, valid until ${dupBooking.endDate || 'active'}). A student cannot hold multiple active desks simultaneously.`);
+        alert(`⚠️ Scholar "${dupBooking.userName || reservationForm.userName}" already holds an active desk (Desk ${dupBooking.seatNumber}, valid until ${dupBooking.endDate || 'active'}). A student cannot hold multiple active desks simultaneously.`);
         return;
       }
 
@@ -538,7 +538,7 @@ export const AdminPage = () => {
   };
 
   const handlePermanentDeleteUser = async (user) => {
-    if (!window.confirm(`…‚‚‚ PERMANENT DELETE: Are you sure you want to permanently erase "${user.fullName || user.name}" from Firestore? This CANNOT be undone.`)) return;
+    if (!window.confirm(`⚠️ PERMANENT DELETE: Are you sure you want to permanently erase "${user.fullName || user.name}" from Firestore? This CANNOT be undone.`)) return;
     try {
       await deleteUserFromFirestore(user.id);
       alert(`✅ User permanently erased.`);
@@ -1688,14 +1688,14 @@ export const AdminPage = () => {
 
               {/* 1. Available Stations */}
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>……‚ Available Stations</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Available Stations</div>
                 <div style={{ fontSize: '1.9rem', fontWeight: 800, color: '#059669', margin: '0.25rem 0 0.1rem' }}>{availableCount}<span style={{ fontSize: '1rem', color: '#94A3B8', fontWeight: 600 }}> / {totalSeats}</span></div>
                 <div style={{ fontSize: '0.75rem', color: '#475569' }}>{bookedSeats} occupied or reserved</div>
               </div>
 
               {/* 2. Occupancy Rate €šââ‚¬ fixed math */}
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>…ââ‚¬Å“… Occupancy Rate</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Occupancy Rate</div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.35rem', margin: '0.25rem 0 0.1rem' }}>
                   <div style={{ fontSize: '1.9rem', fontWeight: 800, color: '#D97706' }}>{occupancyRateExact}%</div>
                 </div>
@@ -1707,7 +1707,7 @@ export const AdminPage = () => {
 
               {/* 3. Locker Utilization €šââ‚¬ NEW */}
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>…ââ‚¬ââ‚¬Ëœ Locker Utilization</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Locker Utilization</div>
                 <div style={{ fontSize: '1.9rem', fontWeight: 800, color: availableLockers === 0 ? '#DC2626' : '#1D4ED8', margin: '0.25rem 0 0.1rem' }}>
                   {bookedLockers}<span style={{ fontSize: '1rem', color: '#94A3B8', fontWeight: 600 }}> / {totalLockers}</span>
                 </div>
@@ -1715,7 +1715,7 @@ export const AdminPage = () => {
                   <div style={{ height: '100%', width: totalLockers > 0 ? `${Math.round((bookedLockers / totalLockers) * 100)}%` : '0%', backgroundColor: availableLockers === 0 ? '#DC2626' : availableLockers <= 3 ? '#D97706' : '#2563EB', borderRadius: '4px' }} />
                 </div>
                 <div style={{ fontSize: '0.72rem', color: availableLockers === 0 ? '#DC2626' : '#059669', fontWeight: 600 }}>
-                  {availableLockers === 0 ? '…ââ‚¬‚ All lockers assigned' : `${availableLockers} key locker${availableLockers !== 1 ? 's' : ''} free`}
+                  {availableLockers === 0 ? 'All lockers assigned' : `${availableLockers} key locker${availableLockers !== 1 ? 's' : ''} free`}
                 </div>
               </div>
 
@@ -1728,7 +1728,7 @@ export const AdminPage = () => {
 
               {/* 5. Total Revenue */}
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>…ââ‚¬â„¢‚ Total Revenue</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Total Revenue</div>
                 <div style={{ fontSize: '1.55rem', fontWeight: 800, color: '#0F172A', margin: '0.25rem 0 0.1rem' }}>NPR {totalGrossRevenue.toLocaleString()}</div>
                 <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 600 }}>NPR {collectedPaidRevenue.toLocaleString()} collected</div>
               </div>
@@ -1824,7 +1824,7 @@ export const AdminPage = () => {
                             </div>
                           </div>
                           <span style={{ fontSize: '0.7rem', fontWeight: 800, color: textColor, backgroundColor: bgBadge, padding: '0.15rem 0.5rem', borderRadius: '10px', whiteSpace: 'nowrap' }}>
-                            {isToday ? '…‚ Expires Today' : `${b.daysLeft}d left`}
+                            {isToday ? 'Expires Today' : `${b.daysLeft}d left`}
                           </span>
                         </div>
                         <div style={{ height: '4px', borderRadius: '4px', backgroundColor: '#F1F5F9', overflow: 'hidden' }}>
@@ -1846,7 +1846,7 @@ export const AdminPage = () => {
                 {/* Header */}
                 <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
                   <div>
-                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A' }}>…ââ‚¬Ëœ‚ Scholar Register</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0F172A' }}>Scholar Register</div>
                     <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '0.1rem' }}>
                       {activeScholarsTable.length} active · {pastScholarsList.length} past
                     </div>
@@ -1901,10 +1901,10 @@ export const AdminPage = () => {
 
                           let statusBg = '#ECFDF5', statusColor = '#047857', statusLabel = `${b.daysLeft}d left`;
                           if (isPast) { statusBg = '#F1F5F9'; statusColor = '#64748B'; statusLabel = 'Expired'; }
-                          else if (b.daysLeft === 0) { statusBg = '#FEF2F2'; statusColor = '#B91C1C'; statusLabel = '…‚ Today'; }
-                          else if (isUrgent) { statusBg = '#FEF2F2'; statusColor = '#B91C1C'; statusLabel = `…ââ‚¬‚ ${b.daysLeft}d left`; }
-                          else if (isWarning) { statusBg = '#FFFBEB'; statusColor = '#B45309'; statusLabel = `……‚ ${b.daysLeft}d left`; }
-                          else { statusLabel = `……‚ ${b.daysLeft}d left`; }
+                          else if (b.daysLeft === 0) { statusBg = '#FEF2F2'; statusColor = '#B91C1C'; statusLabel = 'Today'; }
+                          else if (isUrgent) { statusBg = '#FEF2F2'; statusColor = '#B91C1C'; statusLabel = `⚠️ ${b.daysLeft}d left`; }
+                          else if (isWarning) { statusBg = '#FFFBEB'; statusColor = '#B45309'; statusLabel = `${b.daysLeft}d left`; }
+                          else { statusLabel = `${b.daysLeft}d left`; }
 
                           const rowBg = isPast ? '#FAFAFA' : (isUrgent ? '#FFF8F8' : isWarning ? '#FFFEF5' : '#FFFFFF');
                           const passColors = {
@@ -1936,7 +1936,7 @@ export const AdminPage = () => {
                               </td>
                               <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center' }}>
                                 {b.hasLocker ? (
-                                  <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '0.15rem 0.45rem', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700 }}>…ââ‚¬ââ‚¬Ëœ {lockerDisplay}</span>
+                                  <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '0.15rem 0.45rem', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700 }}>{lockerDisplay}</span>
                                 ) : (
                                   <span style={{ color: '#CBD5E1', fontSize: '0.75rem' }}>€šââ‚¬</span>
                                 )}
@@ -1973,7 +1973,7 @@ export const AdminPage = () => {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.85rem' }}>
                     <div>
-                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#B45309', textTransform: 'uppercase', letterSpacing: '0.04em' }}>…ââ‚¬â„¢‚ Payment Pending</div>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#B45309', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Payment Pending</div>
                       <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#92400E', marginTop: '0.2rem' }}>
                         NPR {pendingReceivables.toLocaleString()}
                       </div>
@@ -2006,7 +2006,7 @@ export const AdminPage = () => {
                 {/* ── Card 2: Live Desk Grid with Legend ── */}
                 <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '1.25rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                    <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0F172A' }}>…ââ‚¬Å“ââ‚¬ Live Desk Grid</div>
+                    <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0F172A' }}>Live Desk Grid</div>
                     <button
                       onClick={() => setActiveTab('DESKS')}
                       style={{ background: 'none', border: 'none', color: '#2563EB', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
@@ -2049,10 +2049,10 @@ export const AdminPage = () => {
 
                     {/* Summary row */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', paddingTop: '0.65rem', borderTop: '1px solid #F1F5F9', fontSize: '0.7rem', color: '#64748B', fontWeight: 600 }}>
-                    <span style={{ color: '#047857' }}>……‚ {availableCount} Free</span>
-                    <span style={{ color: '#B91C1C' }}>…ââ‚¬‚ {occupiedCount} Busy</span>
-                    <span style={{ color: '#B45309' }}>……‚ {reservedCount} Reserved</span>
-                    <span style={{ color: '#6B7280' }}>…‚ {maintenanceCount} Maint</span>
+                    <span style={{ color: '#047857' }}>{availableCount} Free</span>
+                    <span style={{ color: '#B91C1C' }}>{occupiedCount} Busy</span>
+                    <span style={{ color: '#B45309' }}>{reservedCount} Reserved</span>
+                    <span style={{ color: '#6B7280' }}>{maintenanceCount} Maint</span>
                   </div>
                 </div>
 
@@ -5573,7 +5573,7 @@ export const AdminPage = () => {
               membershipStatus: 'ACTIVE'
             });
 
-            alert(`✅ Desk ${seat.seatNumber} assigned to ${displayName}!\nBooking Code: ${bookingCode}\nTotal: NPR ${Number(totalAmount).toLocaleString()}${Number(pendingAmount) > 0 ? `\n…‚ Due: NPR ${Number(pendingAmount).toLocaleString()}` : ' (Fully Paid)'}`);
+            alert(`✅ Desk ${seat.seatNumber} assigned to ${displayName}!\nBooking Code: ${bookingCode}\nTotal: NPR ${Number(totalAmount).toLocaleString()}${Number(pendingAmount) > 0 ? `\n⚠ Due: NPR ${Number(pendingAmount).toLocaleString()}` : ' (Fully Paid)'}`);
           } catch (err) {
             console.error('Error assigning student:', err);
             alert('Failed to assign student: ' + err.message);
