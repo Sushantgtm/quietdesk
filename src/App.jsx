@@ -10,6 +10,21 @@ import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { TermsOfServicePage } from './pages/TermsOfServicePage';
 import { FaqPage } from './pages/FaqPage';
 
+// Automatically purge stale or corrupted local caches containing legacy mojibake characters
+try {
+  const keysToRemove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('quietdesk_')) {
+      const val = localStorage.getItem(key);
+      if (val && (val.includes('Ã') || val.includes('â') || val.includes('€') || val.includes('…'))) {
+        keysToRemove.push(key);
+      }
+    }
+  }
+  keysToRemove.forEach(k => localStorage.removeItem(k));
+} catch (_) {}
+
 export function App() {
   return (
     <AuthProvider>

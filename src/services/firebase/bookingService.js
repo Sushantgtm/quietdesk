@@ -7,15 +7,15 @@ import { findOrCreateStudentFirestore } from './userService';
 import { calculateRenewalEndDate } from '../../utils/dateUtils';
 
 // ─── localStorage cache helpers (UI cache ONLY — not authoritative source) ───
-const CACHE_KEY = 'quietdesk_bookings_cache_v6';
+const CACHE_KEY = 'quietdesk_bookings_cache_v7';
 
 // Purge all legacy cache keys
 try {
-  ['v1','v2','v3','v4','v5'].forEach(v => {
+  ['v1','v2','v3','v4','v5','v6'].forEach(v => {
     localStorage.removeItem(`quietdesk_bookings_${v}`);
     localStorage.removeItem(`quietdesk_bookings_cache_${v}`);
   });
-} catch(_) {}
+} catch (_) {}
 
 const getCachedBookings = () => {
   try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '[]'); } catch(_) { return []; }

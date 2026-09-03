@@ -3,11 +3,11 @@ import { db } from './firebase';
 
 export const MOCK_USERS = [];
 
-const LOCAL_STORAGE_USERS_KEY = 'quietdesk_users_v6';
+const LOCAL_STORAGE_USERS_KEY = 'quietdesk_users_v7';
 
 // Purge legacy cache keys
 try {
-  ['v1', 'v2', 'v3', 'v4', 'v5'].forEach(v => {
+  ['v1', 'v2', 'v3', 'v4', 'v5', 'v6'].forEach(v => {
     localStorage.removeItem(`quietdesk_users_${v}`);
   });
 } catch (e) {}

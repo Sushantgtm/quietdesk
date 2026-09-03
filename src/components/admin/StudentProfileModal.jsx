@@ -1,3 +1,4 @@
+import React, { useState, useMemo } from 'react';
 import {
   X, User, Phone, Mail, MapPin, Shield, Clock, Bookmark,
   Lock, CreditCard, CheckCircle2, AlertCircle, Edit3,
