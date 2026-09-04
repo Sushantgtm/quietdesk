@@ -8,7 +8,7 @@ import {
   UserCheck, AlertCircle, Clock, TrendingUp, CreditCard, ChevronDown, Check, X,
   Users, UserPlus, UserMinus, Package, Edit, Edit3, Plus, Eye, Trash2, Lock, Tag, XCircle, Phone, Mail, User,
   PlusCircle, Sparkles, Layers, Sliders, MapPin, FileText, CheckCircle, Printer, Copy, AlertTriangle,
-  Compass, DoorOpen, Bookmark, RotateCcw, FolderArchive, Download
+  Compass, DoorOpen, Bookmark, RotateCcw, FolderArchive, Download, MessageSquare
 } from 'lucide-react';
 import { seedAllCollectionsToFirestore } from '../services/firebase/seedService';
 import { deleteUser as deleteUserFromFirestore, purgeAllUsersFromFirestore } from '../services/firebase/userService';
@@ -22,6 +22,7 @@ import { StudentProfileModal } from '../components/admin/StudentProfileModal';
 import { ReservationConfirmModal } from '../components/admin/ReservationConfirmModal';
 import { exportToExcel } from '../utils/exportExcel';
 import { calculatePackageEndDate } from '../utils/dateUtils';
+import { deleteContactInquiry, subscribeContactInquiries, updateContactInquiryStatus } from '../services/firebase/contactService';
 
 export const AdminPage = () => {
   const { isAuthenticated, logout, admin } = useAuth();
@@ -46,6 +47,9 @@ export const AdminPage = () => {
   const [seedingStatus, setSeedingStatus] = useState(null);
   const [isSeeding, setIsSeeding] = useState(false);
   const [showDeveloperSeeder, setShowDeveloperSeeder] = useState(false);
+  const [inquiries, setInquiries] = useState([]);
+  const [inquiryError, setInquiryError] = useState('');
+  const [selectedInquiry, setSelectedInquiry] = useState(null);
 
   // Filters for Desks & Users
   const [seatZoneFilter, setSeatZoneFilter] = useState('ALL');
@@ -241,6 +245,49 @@ export const AdminPage = () => {
       navigate('/admin/login');
     }
   }, [isAuthenticated, navigate]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    return subscribeContactInquiries((updatedInquiries) => {
+      setInquiries(updatedInquiries);
+      setSelectedInquiry((current) => current ? updatedInquiries.find((inquiry) => inquiry.id === current.id) || null : null);
+      setInquiryError('');
+    }, (error) => {
+      console.error('Unable to load contact inquiries:', error);
+      setInquiryError('Unable to load inquiries from Firestore.');
+    });
+  }, [isAuthenticated]);
+
+  const newInquiryCount = inquiries.filter((inquiry) => inquiry.status === 'new').length;
+
+  const formatInquiryDate = (timestamp) => {
+    const date = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return 'Date unavailable';
+    return new Intl.DateTimeFormat('en-US', {
+      dateStyle: 'long',
+      timeStyle: 'short'
+    }).format(date);
+  };
+
+  const handleInquiryStatus = async (inquiryId, status) => {
+    try {
+      await updateContactInquiryStatus(inquiryId, status);
+    } catch (error) {
+      console.error('Unable to update inquiry status:', error);
+      setInquiryError('Unable to update this inquiry right now.');
+    }
+  };
+
+  const handleDeleteInquiry = async (inquiry) => {
+    if (!window.confirm(`Delete the inquiry from ${inquiry.name || 'this customer'}?`)) return;
+    try {
+      await deleteContactInquiry(inquiry.id);
+      setSelectedInquiry(null);
+    } catch (error) {
+      console.error('Unable to delete inquiry:', error);
+      setInquiryError('Unable to delete this inquiry right now.');
+    }
+  };
 
   const handleSeedDatabase = async () => {
     setIsSeeding(true);
@@ -1486,6 +1533,7 @@ export const AdminPage = () => {
                 isAlert: pendingConfirmations.length > 0
               },
               { id: 'PACKAGES', label: 'Access Packages', icon: <Package size={18} />, badge: plans.length },
+              { id: 'INQUIRIES', label: 'Inquiry Messages', icon: <MessageSquare size={18} />, badge: newInquiryCount, isAlert: newInquiryCount > 0 },
               { id: 'FINANCE', label: 'Finance & Revenue', icon: <CreditCard size={18} />, badge: 'NPR', isSuccess: true },
               { id: 'CMS', label: 'Landing Page CMS', icon: <Sliders size={18} />, activeColor: '#10B981' },
               { id: 'SYSTEM', label: 'System & Database', icon: <Settings size={18} /> },
@@ -1615,6 +1663,7 @@ export const AdminPage = () => {
               {activeTab === 'DESKS' && 'Desks & Station Control'}
               {activeTab === 'BOOKINGS' && 'User Reservation Queue'}
               {activeTab === 'PACKAGES' && 'Access Packages & Pricing Management'}
+              {activeTab === 'INQUIRIES' && 'Customer Inquiry Messages'}
               {activeTab === 'FINANCE' && 'Real-Time Financial & Revenue Management'}
               {activeTab === 'CMS' && 'Landing Page CMS & Content Controls'}
               {activeTab === 'SYSTEM' && 'System Parameters & Maintenance'}
@@ -3212,6 +3261,103 @@ export const AdminPage = () => {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ==================== TAB 3: BOOKINGS QUEUE ==================== */}
+        {activeTab === 'INQUIRIES' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 0.85fr) minmax(0, 1.15fr)', gap: '1.25rem' }}>
+            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+              <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <strong style={{ color: '#0F172A' }}>All Inquiries</strong>
+                <span style={{ color: '#64748B', fontSize: '0.8rem' }}>{inquiries.length} total</span>
+              </div>
+              {inquiryError && (
+                <div style={{ padding: '0.75rem 1.25rem', backgroundColor: '#FEF2F2', color: '#B91C1C', fontSize: '0.82rem' }}>
+                  {inquiryError}
+                </div>
+              )}
+              {!inquiries.length && !inquiryError && (
+                <div style={{ padding: '2.5rem 1.25rem', textAlign: 'center', color: '#64748B', fontSize: '0.9rem' }}>
+                  No inquiry messages yet.
+                </div>
+              )}
+              <div style={{ maxHeight: '620px', overflowY: 'auto' }}>
+                {inquiries.map((inquiry) => {
+                  const isSelected = selectedInquiry?.id === inquiry.id;
+                  return (
+                    <button
+                      key={inquiry.id}
+                      onClick={() => setSelectedInquiry(inquiry)}
+                      style={{
+                        width: '100%',
+                        padding: '1rem 1.25rem',
+                        border: 'none',
+                        borderBottom: '1px solid #E2E8F0',
+                        borderLeft: `3px solid ${isSelected ? '#F59E0B' : 'transparent'}`,
+                        backgroundColor: isSelected ? '#FFFBEB' : '#FFFFFF',
+                        textAlign: 'left',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
+                        <strong style={{ color: '#0F172A', fontSize: '0.92rem' }}>{inquiry.name || 'Unnamed visitor'}</strong>
+                        <span style={{ color: inquiry.status === 'new' ? '#B45309' : '#64748B', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase' }}>
+                          {inquiry.status || 'new'}
+                        </span>
+                      </div>
+                      <div style={{ color: '#64748B', fontSize: '0.78rem', marginTop: '0.25rem' }}>{inquiry.email}</div>
+                      <div style={{ color: '#475569', fontSize: '0.8rem', marginTop: '0.45rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {inquiry.message}
+                      </div>
+                      <div style={{ color: '#94A3B8', fontSize: '0.72rem', marginTop: '0.45rem' }}>{formatInquiryDate(inquiry.created_at)}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '1.5rem', minHeight: '300px' }}>
+              {!selectedInquiry ? (
+                <div style={{ minHeight: '260px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', fontSize: '0.9rem', textAlign: 'center' }}>
+                  Select an inquiry to view the complete message.
+                </div>
+              ) : (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+                    <div>
+                      <h3 style={{ color: '#0F172A', margin: 0, fontSize: '1.35rem' }}>{selectedInquiry.name || 'Unnamed visitor'}</h3>
+                      <div style={{ color: '#64748B', fontSize: '0.82rem', marginTop: '0.3rem' }}>{formatInquiryDate(selectedInquiry.created_at)}</div>
+                    </div>
+                    <span style={{ padding: '0.3rem 0.65rem', borderRadius: '999px', backgroundColor: selectedInquiry.status === 'new' ? '#FEF3C7' : selectedInquiry.status === 'resolved' ? '#D1FAE5' : '#E2E8F0', color: selectedInquiry.status === 'new' ? '#92400E' : selectedInquiry.status === 'resolved' ? '#047857' : '#475569', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase' }}>
+                      {selectedInquiry.status || 'new'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gap: '0.75rem', paddingBottom: '1.5rem', borderBottom: '1px solid #E2E8F0' }}>
+                    <div style={{ display: 'flex', gap: '0.65rem', color: '#475569', fontSize: '0.9rem' }}><Mail size={17} color="#D97706" />{selectedInquiry.email}</div>
+                    <div style={{ display: 'flex', gap: '0.65rem', color: '#475569', fontSize: '0.9rem' }}><Phone size={17} color="#D97706" />{selectedInquiry.phone}</div>
+                  </div>
+                  <div style={{ padding: '1.5rem 0', color: '#334155', fontSize: '1rem', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                    {selectedInquiry.message}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.65rem' }}>
+                    {selectedInquiry.status === 'new' && (
+                      <button onClick={() => handleInquiryStatus(selectedInquiry.id, 'read')} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', border: '1px solid #CBD5E1', borderRadius: '7px', background: '#FFFFFF', color: '#334155', padding: '0.55rem 0.8rem', cursor: 'pointer', fontWeight: 700 }}>
+                        <Check size={15} /> Mark as Read
+                      </button>
+                    )}
+                    {selectedInquiry.status !== 'resolved' && (
+                      <button onClick={() => handleInquiryStatus(selectedInquiry.id, 'resolved')} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', border: 'none', borderRadius: '7px', background: '#059669', color: '#FFFFFF', padding: '0.55rem 0.8rem', cursor: 'pointer', fontWeight: 700 }}>
+                        <CheckCircle2 size={15} /> Mark as Resolved
+                      </button>
+                    )}
+                    <button onClick={() => handleDeleteInquiry(selectedInquiry)} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', border: '1px solid #FECACA', borderRadius: '7px', background: '#FFF1F2', color: '#B91C1C', padding: '0.55rem 0.8rem', cursor: 'pointer', fontWeight: 700 }}>
+                      <Trash2 size={15} /> Delete
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

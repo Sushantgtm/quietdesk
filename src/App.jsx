@@ -9,6 +9,8 @@ import { AdminLoginPage } from './pages/AdminLoginPage';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { TermsOfServicePage } from './pages/TermsOfServicePage';
 import { FaqPage } from './pages/FaqPage';
+import { ContactPage } from './pages/ContactPage';
+import { WhatsAppButton } from './components/WhatsAppButton';
 
 // Automatically purge stale or corrupted local caches containing legacy mojibake characters
 try {
@@ -38,7 +40,9 @@ export function App() {
             <Route path="/privacy" element={<PrivacyPolicyPage />} />
             <Route path="/terms" element={<TermsOfServicePage />} />
             <Route path="/faq" element={<FaqPage />} />
+            <Route path="/contact" element={<ContactPage />} />
           </Routes>
+          <WhatsAppButton />
         </Router>
       </BookingProvider>
     </AuthProvider>

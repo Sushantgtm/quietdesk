@@ -32,6 +32,7 @@ export const Header = () => {
     { label: 'Amenities', anchor: '#features' },
     { label: 'Seat Map', anchor: '#seats' },
     { label: 'Pricing', anchor: '#pricing' },
+    { label: 'Contact Us', path: '/contact' },
     { label: 'FAQ', anchor: '#faq' }
   ];
 
@@ -70,6 +71,10 @@ export const Header = () => {
         .nav-link:hover {
           color: var(--primary);
           background: rgba(74,60,43,0.06);
+        }
+        .nav-link.active {
+          color: var(--primary);
+          background: var(--accent-light);
         }
         .nav-cta {
           display: flex;
@@ -133,6 +138,10 @@ export const Header = () => {
           color: var(--primary);
           background: rgba(74,60,43,0.05);
         }
+        .mobile-nav-btn.active {
+          color: var(--primary);
+          background: var(--accent-light);
+        }
         @media (max-width: 768px) {
           .desktop-nav { display: none !important; }
           .mobile-toggle { display: flex !important; }
@@ -183,7 +192,11 @@ export const Header = () => {
 
           {/* Desktop Nav */}
           <nav className="desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-            {navLinks.map(({ label, anchor }) => (
+            {navLinks.map(({ label, anchor, path }) => path ? (
+              <Link key={label} to={path} className={`nav-link ${location.pathname === path ? 'active' : ''}`}>
+                {label}
+              </Link>
+            ) : (
               <button key={label} onClick={() => handleNavClick(anchor)} className="nav-link">
                 {label}
               </button>
@@ -217,7 +230,16 @@ export const Header = () => {
         {/* Mobile Drawer */}
         {mobileMenuOpen && (
           <div className="mobile-drawer">
-            {navLinks.map(({ label, anchor }) => (
+            {navLinks.map(({ label, anchor, path }) => path ? (
+              <Link
+                key={label}
+                to={path}
+                onClick={() => setMobileMenuOpen(false)}
+                className={`mobile-nav-btn ${location.pathname === path ? 'active' : ''}`}
+              >
+                {label}
+              </Link>
+            ) : (
               <button key={label} onClick={() => handleNavClick(anchor)} className="mobile-nav-btn">{label}</button>
             ))}
             <div style={{ height: '1px', background: 'var(--border-subtle)', margin: '0.25rem 0' }} />

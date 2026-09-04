@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, Mail, Phone, Instagram, Facebook, Shield } from 'lucide-react';
+import { FaTiktok } from 'react-icons/fa6';
 import whiteLogoImg from '../../../image/White logo.jpg';
 
 export const Footer = () => {
@@ -74,7 +75,7 @@ export const Footer = () => {
               </li>
               <li style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <Phone size={16} color="var(--accent)" />
-                <span>+977 9864826810</span>
+                <a href="tel:+9779764826810" style={{ color: 'inherit' }}>+977 9764826810</a>
               </li>
             </ul>
           </div>
@@ -117,7 +118,7 @@ export const Footer = () => {
                 <Instagram size={20} />
               </a>
               <a
-                href="https://facebook.com"
+                href="https://www.facebook.com/profile.php?id=61592779510356"
                 target="_blank"
                 rel="noreferrer"
                 style={{
@@ -133,6 +134,25 @@ export const Footer = () => {
                 }}
               >
                 <Facebook size={20} />
+              </a>
+              <a
+                href="https://www.tiktok.com/@thequietdeskk"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="TikTok"
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: 'var(--radius-full)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#FFFFFF',
+                  transition: 'var(--transition)'
+                }}
+              >
+                <FaTiktok size={18} />
               </a>
             </div>
           </div>

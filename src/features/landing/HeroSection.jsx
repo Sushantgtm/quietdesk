@@ -45,9 +45,9 @@ export const HeroSection = () => {
               <Link to="/book" className="btn btn-primary" style={{ padding: '0.875rem 1.75rem', fontSize: '1rem' }}>
                 Reserve Your Seat <ArrowRight size={18} />
               </Link>
-              <a href="#about" className="btn btn-outline" style={{ padding: '0.875rem 1.75rem', fontSize: '1rem' }}>
-                Explore the Space
-              </a>
+              <Link to="/contact" className="btn btn-outline" style={{ padding: '0.875rem 1.75rem', fontSize: '1rem' }}>
+                Contact Us
+              </Link>
             </div>
 
             {/* Highlights Bar */}
