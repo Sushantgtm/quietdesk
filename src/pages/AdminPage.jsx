@@ -1279,7 +1279,7 @@ export const AdminPage = () => {
     .filter(b => b.daysLeft < 0 || b.status === 'COMPLETED')
     .sort((a, b) => b.daysLeft - a.daysLeft); // most recently expired first
 
-  // Active scholars table: expiring ‚¬‚3 days pinned first, then by soonest
+  // Active scholars table: expiring <= 3 days pinned first, then by soonest
   const activeScholarsTable = [
     ...sessionExpiryList.filter(b => b.daysLeft <= 3),
     ...sessionExpiryList.filter(b => b.daysLeft > 3).sort((a, b) => {
@@ -1468,7 +1468,7 @@ export const AdminPage = () => {
                 </h1>
                 <div style={{ fontSize: '0.75rem', color: '#94A3B8', marginTop: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block', flexShrink: 0 }}></span>
-                  <span style={{ whiteSpace: 'nowrap' }}>Lazimpat €š‚ Online</span>
+                  <span style={{ whiteSpace: 'nowrap' }}>Lazimpat • Online</span>
                 </div>
               </div>
             ) : (
@@ -1669,7 +1669,7 @@ export const AdminPage = () => {
               {activeTab === 'SYSTEM' && 'System Parameters & Maintenance'}
             </h2>
             <div style={{ fontSize: '0.85rem', color: '#64748B', marginTop: '0.2rem' }}>
-              Real-time synchronization with Firestore €š‚ Kathmandu, Nepal
+              Real-time synchronization with Firestore • Kathmandu, Nepal
             </div>
           </div>
 
@@ -1721,7 +1721,7 @@ export const AdminPage = () => {
                 <div style={{ fontSize: '0.75rem', color: '#475569' }}>{bookedSeats} occupied or reserved</div>
               </div>
 
-              {/* 2. Occupancy Rate €šââ‚¬ fixed math */}
+              {/* 2. Occupancy Rate fixed math */}
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                 <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Occupancy Rate</div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.35rem', margin: '0.25rem 0 0.1rem' }}>
@@ -1733,7 +1733,7 @@ export const AdminPage = () => {
                 <div style={{ fontSize: '0.72rem', color: '#475569' }}>{occupiedCount} occupied · {reservedCount} reserved · {totalSeats} total</div>
               </div>
 
-              {/* 3. Locker Utilization €šââ‚¬ NEW */}
+              {/* 3. Locker Utilization NEW */}
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                 <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Locker Utilization</div>
                 <div style={{ fontSize: '1.9rem', fontWeight: 800, color: availableLockers === 0 ? '#DC2626' : '#1D4ED8', margin: '0.25rem 0 0.1rem' }}>
@@ -1749,7 +1749,7 @@ export const AdminPage = () => {
 
               {/* 4. Pending Confirmations */}
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>‚‚ Pending Confirmations</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Pending Confirmations</div>
                 <div style={{ fontSize: '1.9rem', fontWeight: 800, color: pendingConfirmations.length > 0 ? '#2563EB' : '#94A3B8', margin: '0.25rem 0 0.1rem' }}>{pendingConfirmations.length}</div>
                 <div style={{ fontSize: '0.72rem', color: '#475569' }}>Reservations awaiting admin confirm</div>
               </div>
@@ -1801,7 +1801,7 @@ export const AdminPage = () => {
                     cursor: 'pointer'
                   }}
                 >
-                  Review Pending Requests ‚¬ââ‚¬â„¢
+                  Review Pending Requests →
                 </button>
               </div>
             )}
@@ -1818,7 +1818,7 @@ export const AdminPage = () => {
               }}>
                 <div style={{ padding: '1rem 1.5rem', background: 'linear-gradient(90deg,#FEF2F2,#FFF7F7)', borderBottom: '1px solid #FECACA', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <span style={{ fontSize: '1.2rem' }}>‚‚</span>
+                    <span style={{ fontSize: '1.2rem' }}>⚠️</span>
                     <div>
                       <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#B91C1C' }}>Sessions Expiring Soon</div>
                       <div style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: '0.05rem' }}>{sessionExpiryList.filter(b => b.daysLeft <= 7).length} scholar{sessionExpiryList.filter(b => b.daysLeft <= 7).length !== 1 ? 's' : ''} need attention</div>
@@ -1828,7 +1828,7 @@ export const AdminPage = () => {
                     onClick={() => setShowSessionExpiryPopup(true)}
                     style={{ padding: '0.3rem 0.8rem', borderRadius: '6px', border: 'none', backgroundColor: '#0F172A', color: '#FFFFFF', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
                   >
-                    View All ‚¬ââ‚¬â„¢
+                    View All →
                   </button>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 0, padding: '0.25rem 0' }}>
@@ -1901,7 +1901,7 @@ export const AdminPage = () => {
                     <button
                       onClick={() => setActiveTab('USERS')}
                       style={{ background: 'none', border: 'none', color: '#2563EB', fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                    >View All Users ‚¬ââ‚¬â„¢</button>
+                    >View All Users →</button>
                   </div>
                 </div>
 
@@ -1941,7 +1941,7 @@ export const AdminPage = () => {
                             DAILY: { bg: '#F3F4F6', color: '#374151' }
                           };
                           const passStyle = passColors[b.passType] || passColors.DAILY;
-                          const lockerDisplay = b.hasLocker ? (b.lockerNumber || b.lockerLabel || '€šââ‚¬') : '€šââ‚¬';
+                          const lockerDisplay = b.hasLocker ? (b.lockerNumber || b.lockerLabel || '—') : '—';
 
                           return (
                             <tr
@@ -1960,20 +1960,20 @@ export const AdminPage = () => {
                                 </div>
                               </td>
                               <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center' }}>
-                                <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#0F172A' }}>{b.seatNumber || '€šââ‚¬'}</span>
+                                <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#0F172A' }}>{b.seatNumber || '—'}</span>
                               </td>
                               <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center' }}>
                                 {b.hasLocker ? (
                                   <span style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '0.15rem 0.45rem', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700 }}>{lockerDisplay}</span>
                                 ) : (
-                                  <span style={{ color: '#CBD5E1', fontSize: '0.75rem' }}>€šââ‚¬</span>
+                                  <span style={{ color: '#CBD5E1', fontSize: '0.75rem' }}>—</span>
                                 )}
                               </td>
                               <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center' }}>
                                 <span style={{ backgroundColor: passStyle.bg, color: passStyle.color, padding: '0.15rem 0.45rem', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700 }}>{b.passType}</span>
                               </td>
                               <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center', fontSize: '0.75rem', color: '#475569', whiteSpace: 'nowrap' }}>
-                                {b.endDate || '€šââ‚¬'}
+                                {b.endDate || '—'}
                               </td>
                               <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center' }}>
                                 <span style={{ backgroundColor: statusBg, color: statusColor, padding: '0.2rem 0.5rem', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 800, whiteSpace: 'nowrap' }}>
@@ -2027,7 +2027,7 @@ export const AdminPage = () => {
                   </div>
 
                   <div style={{ marginTop: '0.85rem', fontSize: '0.75rem', color: '#94A3B8', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                    <CreditCard size={12} /> Click to open Finance & Revenue tab ‚¬ââ‚¬â„¢
+                    <CreditCard size={12} /> Click to open Finance & Revenue tab →
                   </div>
                 </div>
 
@@ -2038,7 +2038,7 @@ export const AdminPage = () => {
                     <button
                       onClick={() => setActiveTab('DESKS')}
                       style={{ background: 'none', border: 'none', color: '#2563EB', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}
-                    >Full View ‚¬ââ‚¬â„¢</button>
+                    >Full View →</button>
                   </div>
 
                   {/* Legend */}

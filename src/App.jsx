@@ -19,7 +19,7 @@ try {
     const key = localStorage.key(i);
     if (key && key.startsWith('quietdesk_')) {
       const val = localStorage.getItem(key);
-      if (val && (val.includes('Ã') || val.includes('â') || val.includes('€') || val.includes('…'))) {
+      if (val && (val.includes('\u00C3') || val.includes('\u00E2') || val.includes('\u20AC') || val.includes('\u2026'))) {
         keysToRemove.push(key);
       }
     }
