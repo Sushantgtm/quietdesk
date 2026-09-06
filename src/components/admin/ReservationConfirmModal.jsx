@@ -12,7 +12,7 @@ export const ReservationConfirmModal = ({
   booking,
   onConfirmSuccess
 }) => {
-  const { seats = [], lockers = [], updateBookingDetails, changeSeatStatus, assignLocker, updateUser, approveBooking } = useBooking();
+  const { seats = [], lockers = [], plans = [], updateBookingDetails, changeSeatStatus, assignLocker, updateUser, approveBooking } = useBooking();
 
   const [seatId, setSeatId] = useState('');
   const [passType, setPassType] = useState('DAILY');
@@ -59,7 +59,10 @@ export const ReservationConfirmModal = ({
   };
 
   const seatRate = Number(currentSeat.pricePerDay) || 500;
-  const basePrice = passType === 'DAILY' ? seatRate : passType === 'WEEKLY' ? 2100 : 7500;
+  const activePlans = plans.filter(plan => !['INACTIVE', 'ARCHIVED', 'DISABLED'].includes(String(plan.status || '').toUpperCase()));
+  const selectedPlan = activePlans.find(plan => plan.id === String(passType).toLowerCase()) || activePlans.find(plan => plan.id === String(booking.packageId || '').toLowerCase());
+  const planPrice = selectedPlan ? Number(String(selectedPlan.price ?? '').replace(/[^\d.]/g, '')) : 0;
+  const basePrice = Number.isFinite(planPrice) && planPrice > 0 ? planPrice : (passType === 'DAILY' ? seatRate : passType === 'WEEKLY' ? 2100 : 7500);
   const lockerFee = hasLocker ? (passType === 'DAILY' ? 200 : passType === 'WEEKLY' ? 300 : 1000) : 0;
   const totalAmount = basePrice + lockerFee;
   const parsedPaid = Math.min(totalAmount, Math.max(0, Number(amountPaid) || totalAmount));
@@ -73,18 +76,29 @@ export const ReservationConfirmModal = ({
     try {
       const selectedSeatObj = seats.find(s => s.id === seatId) || currentSeat;
       const targetSeatNumber = selectedSeatObj.seatNumber || booking.seatNumber;
+      const matchingLocker = hasLocker
+        ? lockers.find(l => l.lockerNumber === lockerNumber || l.id === lockerNumber)
+        : null;
+      if (hasLocker && !matchingLocker) {
+        throw new Error('Please assign an available locker before approving this reservation.');
+      }
 
       // 1. Atomically approve booking & reserve seat in Firestore via transaction
       await approveBooking(booking.id, {
         seatId: selectedSeatObj.id || seatId,
         seatNumber: targetSeatNumber,
         passType,
+        packageId: selectedPlan?.id || booking.packageId || passType.toLowerCase(),
+        packageName: selectedPlan?.name || selectedPlan?.title || booking.packageName || '',
+        packagePrice: basePrice,
         shift,
         startDate,
         endDate,
         arrivalTime,
         hasLocker,
-        lockerNumber: hasLocker ? lockerNumber : '',
+        lockerRequired: hasLocker,
+        lockerId: matchingLocker?.id || null,
+        lockerNumber: matchingLocker?.lockerNumber || '',
         totalAmount,
         amountPaid: parsedPaid,
         pendingAmount,
@@ -108,9 +122,7 @@ export const ReservationConfirmModal = ({
       }
 
       // 3. Update Locker if assigned
-      if (hasLocker && lockerNumber) {
-        const matchingLocker = lockers.find(l => l.lockerNumber === lockerNumber || l.id === lockerNumber);
-        if (matchingLocker) {
+      if (hasLocker && matchingLocker) {
           await assignLocker(matchingLocker.id, {
             userId: booking.userId,
             userName: booking.userName || 'Scholar',
@@ -122,7 +134,12 @@ export const ReservationConfirmModal = ({
             endDate,
             notes: `Approved online reservation ${booking.bookingCode}`
           });
-        }
+          await updateBookingDetails(booking.id, {
+            lockerId: matchingLocker.id,
+            lockerNumber: matchingLocker.lockerNumber,
+            lockerRequired: true,
+            hasLocker: true
+          });
       }
 
       alert(`✅ Reservation ${booking.bookingCode} APPROVED!\nDesk #${targetSeatNumber} is now RESERVED for ${booking.userName}.`);
@@ -229,9 +246,10 @@ export const ReservationConfirmModal = ({
                 }}
                 style={inputStyle}
               >
-                <option value="DAILY">Daily Pass (NPR {seatRate})</option>
-                <option value="WEEKLY">Weekly Pass (NPR 2,100)</option>
-                <option value="MONTHLY">Monthly Membership (NPR 7,500)</option>
+                {activePlans.map(plan => {
+                  const price = Number(String(plan.price ?? '').replace(/[^\d.]/g, '')) || 0;
+                  return <option key={plan.id} value={plan.id.toUpperCase()}>{plan.name || plan.title || 'Access Package'} (NPR {price.toLocaleString()})</option>;
+                })}
               </select>
             </div>
           </div>

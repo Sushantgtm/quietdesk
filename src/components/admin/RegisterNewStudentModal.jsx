@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X, UserPlus, CheckCircle2, AlertTriangle, Lock, ShieldCheck,
   Calendar, Clock, Phone, Mail, User, MapPin, DollarSign,
@@ -19,6 +19,7 @@ export const RegisterNewStudentModal = ({
     seats = [],
     lockers = [],
     bookings = [],
+    plans = [],
     findOrCreateStudent,
     createAdminBooking,
     updateBookingDetails,
@@ -43,7 +44,8 @@ export const RegisterNewStudentModal = ({
     email: '',
     seatId: '',
     seatNumber: '',
-    passType: 'DAILY',
+    passType: 'daily',
+    customPrice: '',
     startDate: today,
     endDate: today,
     hasLocker: false,
@@ -63,25 +65,45 @@ export const RegisterNewStudentModal = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [emailStatusMsg, setEmailStatusMsg] = useState('');
 
+  const activePlans = useMemo(
+    () => plans.filter(plan => !['INACTIVE', 'ARCHIVED', 'DISABLED'].includes(String(plan.status || '').toUpperCase())),
+    [plans]
+  );
+
+  const getPlan = (planId) => activePlans.find(plan => plan.id === planId) || plans.find(plan => plan.id === planId);
+  const getPlanName = (plan) => plan?.name || plan?.title || 'Access Package';
+  const getPlanPrice = (plan) => {
+    const price = Number(String(plan?.price ?? '').replace(/[^\d.]/g, ''));
+    return Number.isFinite(price) && price >= 0 ? price : 0;
+  };
+  const selectedPlan = getPlan(formData.passType);
+
   // Calculate End Date helper (unified dateUtils)
   const calculateEndDate = (startStr, passType) => {
     if (!startStr) return '';
+    const plan = getPlan(passType);
+    const duration = String(plan?.duration || plan?.period || '').toLowerCase();
+    const durationMatch = duration.match(/(\d+)\s*(day|week|month)/);
+    if (durationMatch) {
+      const date = new Date(`${startStr}T12:00:00`);
+      const amount = Number(durationMatch[1]);
+      const unit = durationMatch[2];
+      date.setDate(date.getDate() + (unit === 'week' ? amount * 7 : unit === 'month' ? amount * 30 : amount));
+      return date.toISOString().split('T')[0];
+    }
     return calculatePackageEndDate(startStr, passType);
   };
 
   // Pricing helper
-  const calculatePricing = (passType, seatId, hasLocker) => {
-    let basePrice = 500;
+  const calculatePricing = (passType, seatId, hasLocker, customPrice = '') => {
+    const plan = getPlan(passType);
+    let basePrice = getPlanPrice(plan);
     const currentSeat = seats.find(s => s.id === seatId);
     const seatRate = currentSeat ? Number(currentSeat.pricePerDay) || 500 : 500;
 
-    const pt = (passType || 'DAILY').toUpperCase();
-    if (pt === 'DAILY') {
+    const pt = (passType || '').toUpperCase();
+    if (!plan && pt === 'DAILY') {
       basePrice = seatRate;
-    } else if (pt === 'WEEKLY') {
-      basePrice = 2800;
-    } else if (pt === 'MONTHLY') {
-      basePrice = 9500;
     }
 
     let lockerFee = 0;
@@ -92,14 +114,17 @@ export const RegisterNewStudentModal = ({
       else lockerFee = 200;
     }
 
-    const totalAmount = basePrice + lockerFee;
-    return { basePrice, lockerFee, totalAmount };
+    const parsedCustomPrice = customPrice === '' ? basePrice : Number(customPrice);
+    const finalBasePrice = Number.isFinite(parsedCustomPrice) && parsedCustomPrice >= 0 ? parsedCustomPrice : basePrice;
+    const totalAmount = finalBasePrice + lockerFee;
+    return { basePrice: finalBasePrice, defaultPrice: basePrice, lockerFee, totalAmount };
   };
 
   const { basePrice, lockerFee, totalAmount } = calculatePricing(
     formData.passType,
     formData.seatId,
-    formData.hasLocker
+    formData.hasLocker,
+    formData.customPrice
   );
 
   // Synchronize initial state on open
@@ -111,7 +136,8 @@ export const RegisterNewStudentModal = ({
       if (preselectedBooking) {
         populateFromBooking(preselectedBooking);
       } else if (preselectedSeat) {
-        const pPrice = calculatePricing('DAILY', preselectedSeat.id, false);
+        const initialPlanId = activePlans[0]?.id || 'daily';
+        const pPrice = calculatePricing(initialPlanId, preselectedSeat.id, false, String(getPlanPrice(activePlans[0])));
         setFormData({
           fullName: '',
           address: '',
@@ -119,7 +145,8 @@ export const RegisterNewStudentModal = ({
           email: '',
           seatId: preselectedSeat.id,
           seatNumber: preselectedSeat.seatNumber,
-          passType: 'DAILY',
+          passType: activePlans[0]?.id || 'daily',
+          customPrice: String(getPlanPrice(activePlans[0])),
           startDate: today,
           endDate: today,
           hasLocker: false,
@@ -137,7 +164,8 @@ export const RegisterNewStudentModal = ({
         setSelectedPendingId('');
       } else {
         const firstAvailSeat = seats.find(s => s.status === 'AVAILABLE');
-        const pPrice = calculatePricing('DAILY', firstAvailSeat?.id, false);
+        const initialPlanId = activePlans[0]?.id || 'daily';
+        const pPrice = calculatePricing(initialPlanId, firstAvailSeat?.id, false, String(getPlanPrice(activePlans[0])));
         setFormData({
           fullName: '',
           address: '',
@@ -145,7 +173,8 @@ export const RegisterNewStudentModal = ({
           email: '',
           seatId: firstAvailSeat?.id || '',
           seatNumber: firstAvailSeat?.seatNumber || '',
-          passType: 'DAILY',
+          passType: activePlans[0]?.id || 'daily',
+          customPrice: String(getPlanPrice(activePlans[0])),
           startDate: today,
           endDate: today,
           hasLocker: false,
@@ -168,7 +197,8 @@ export const RegisterNewStudentModal = ({
   const populateFromBooking = (b) => {
     setSelectedPendingId(b.id);
     const calculatedEnd = b.endDate || calculateEndDate(b.startDate || today, b.passType || 'DAILY');
-    const pPrice = calculatePricing(b.passType || 'DAILY', b.seatId, !!b.hasLocker);
+    const bookingPlanId = b.packageId || b.passType || activePlans[0]?.id || 'daily';
+    const pPrice = calculatePricing(bookingPlanId, b.seatId, !!b.hasLocker, b.customPrice ?? '');
 
     const firstAvailLocker = lockers.find(l => l.status === 'AVAILABLE');
 
@@ -179,7 +209,8 @@ export const RegisterNewStudentModal = ({
       email: b.userEmail || b.email || '',
       seatId: b.seatId || '',
       seatNumber: b.seatNumber || '',
-      passType: b.passType || 'DAILY',
+      passType: b.packageId || b.passType || activePlans[0]?.id || 'daily',
+      customPrice: b.customPrice !== undefined ? String(b.customPrice) : String(b.packagePrice || pPrice.defaultPrice),
       startDate: b.startDate || today,
       endDate: calculatedEnd,
       hasLocker: !!b.hasLocker,
@@ -201,7 +232,8 @@ export const RegisterNewStudentModal = ({
     if (!bookingId) {
       setSelectedPendingId('');
       const firstAvail = seats.find(s => s.status === 'AVAILABLE');
-      const pPrice = calculatePricing('DAILY', firstAvail?.id, false);
+      const initialPlanId = activePlans[0]?.id || 'daily';
+      const pPrice = calculatePricing(initialPlanId, firstAvail?.id, false, String(getPlanPrice(activePlans[0])));
       setFormData(prev => ({
         ...prev,
         fullName: '',
@@ -210,12 +242,13 @@ export const RegisterNewStudentModal = ({
         email: '',
         seatId: firstAvail?.id || '',
         seatNumber: firstAvail?.seatNumber || '',
-        passType: 'DAILY',
+        passType: activePlans[0]?.id || 'daily',
+        customPrice: String(getPlanPrice(activePlans[0])),
         startDate: today,
         endDate: today,
         hasLocker: false,
         lockerNumber: '',
-        amountPaid: String(pPrice.totalAmount)
+          amountPaid: String(pPrice.totalAmount)
       }));
       return;
     }
@@ -228,14 +261,23 @@ export const RegisterNewStudentModal = ({
   // Handle Pass change
   const handlePassTypeChange = (newPassType) => {
     const newEnd = calculateEndDate(formData.startDate, newPassType);
-    const pPrice = calculatePricing(newPassType, formData.seatId, formData.hasLocker);
+    const defaultPrice = getPlanPrice(getPlan(newPassType));
+    const pPrice = calculatePricing(newPassType, formData.seatId, formData.hasLocker, String(defaultPrice));
     setFormData(prev => ({
       ...prev,
       passType: newPassType,
+      customPrice: String(defaultPrice),
       endDate: newEnd,
       amountPaid: String(pPrice.totalAmount)
     }));
     if (errors.passType) setErrors(prev => ({ ...prev, passType: null }));
+  };
+
+  const handleCustomPriceChange = (value) => {
+    setFormData(prev => ({ ...prev, customPrice: value }));
+    const pPrice = calculatePricing(formData.passType, formData.seatId, formData.hasLocker, value);
+    setFormData(prev => ({ ...prev, amountPaid: String(pPrice.totalAmount) }));
+    if (errors.customPrice) setErrors(prev => ({ ...prev, customPrice: null }));
   };
 
   // Handle Start Date change
@@ -262,6 +304,9 @@ export const RegisterNewStudentModal = ({
     }
     if (!formData.seatId) errs.seatId = 'A physical desk station must be selected.';
     if (!formData.passType) errs.passType = 'Package selection is required.';
+    if (formData.customPrice !== '' && (!/^\d+(\.\d{1,2})?$/.test(String(formData.customPrice)) || Number(formData.customPrice) < 0)) {
+      errs.customPrice = 'Enter a valid non-negative custom price.';
+    }
     if (!formData.startDate) errs.startDate = 'Start date is required.';
     if (!formData.endDate) errs.endDate = 'End date is required.';
     if (!formData.paymentMethod) errs.paymentMethod = 'Payment mode is required.';
@@ -353,6 +398,10 @@ export const RegisterNewStudentModal = ({
         vehicleNumber: formData.parkingNeeded ? formData.vehicleNumber.trim() : '',
         referralSource: formData.referralSource === 'Other' ? formData.referralOther.trim() : formData.referralSource,
         passType: formData.passType,
+        packageId: selectedPlan?.id || formData.passType,
+        packageName: getPlanName(selectedPlan),
+        packagePrice: basePrice,
+        customPrice: formData.customPrice === '' ? null : Number(formData.customPrice),
         startDate: formData.startDate,
         endDate: formData.endDate,
         assignedSeat: `Desk ${selectedSeatObj.seatNumber}`,
@@ -385,6 +434,10 @@ export const RegisterNewStudentModal = ({
           seatId: selectedSeatObj.id,
           seatNumber: selectedSeatObj.seatNumber,
           passType: formData.passType,
+          packageId: selectedPlan?.id || formData.passType,
+          packageName: getPlanName(selectedPlan),
+          packagePrice: basePrice,
+          customPrice: formData.customPrice === '' ? null : Number(formData.customPrice),
           startDate: formData.startDate,
           endDate: formData.endDate,
           hasLocker: formData.hasLocker,
@@ -415,6 +468,10 @@ export const RegisterNewStudentModal = ({
           seatId: selectedSeatObj.id,
           seatNumber: selectedSeatObj.seatNumber,
           passType: formData.passType,
+          packageId: selectedPlan?.id || formData.passType,
+          packageName: getPlanName(selectedPlan),
+          packagePrice: basePrice,
+          customPrice: formData.customPrice === '' ? null : Number(formData.customPrice),
           startDate: formData.startDate,
           endDate: formData.endDate,
           hasLocker: formData.hasLocker,
@@ -729,11 +786,28 @@ export const RegisterNewStudentModal = ({
                   onChange={e => handlePassTypeChange(e.target.value)}
                   style={inputStyle(!!errors.passType)}
                 >
-                  <option value="DAILY">Daily Pass (Per day base rate)</option>
-                  <option value="WEEKLY">Weekly Pass (7 Days - NPR 2,800)</option>
-                  <option value="MONTHLY">Monthly Membership (30 Days - NPR 9,500)</option>
+                  <option value="">-- Choose Package --</option>
+                  {activePlans.map(plan => (
+                    <option key={plan.id} value={plan.id}>
+                      {getPlanName(plan)}
+                    </option>
+                  ))}
                 </select>
                 {errors.passType && <div style={errStyle}>{errors.passType}</div>}
+              </div>
+
+              <div>
+                <label style={labelStyle}>Custom Price (NPR) <span style={{ color: '#64748B', fontWeight: 500 }}>Default: {getPlanPrice(selectedPlan).toLocaleString()}</span></label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.customPrice}
+                  onChange={e => handleCustomPriceChange(e.target.value)}
+                  placeholder={String(getPlanPrice(selectedPlan))}
+                  style={inputStyle(!!errors.customPrice)}
+                />
+                {errors.customPrice && <div style={errStyle}>{errors.customPrice}</div>}
               </div>
 
               <div>
@@ -803,7 +877,7 @@ export const RegisterNewStudentModal = ({
                     onChange={e => {
                       const hasL = e.target.checked;
                       const firstAvail = lockers.find(l => l.status === 'AVAILABLE');
-                      const pPrice = calculatePricing(formData.passType, formData.seatId, hasL);
+                      const pPrice = calculatePricing(formData.passType, formData.seatId, hasL, formData.customPrice);
                       setFormData(prev => ({
                         ...prev,
                         hasLocker: hasL,

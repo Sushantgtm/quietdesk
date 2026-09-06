@@ -1,4 +1,4 @@
-import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, getDocs, runTransaction } from 'firebase/firestore';
 import { db } from './firebase';
 import { MOCK_LOCKERS } from '../mock/mockData';
 
@@ -116,40 +116,6 @@ export const updateLockerStatusInFirestore = async (lockerId, newStatus, details
 };
 
 export const assignLockerInFirestore = async (lockerId, { userId, userName, userPhone, userEmail, seatNumber, passType, pinCode, notes, startDate, endDate }) => {
-  // 1. Enforce max 1 active locker rule: if student already has another locker, release it first
-  const normalizedPhone = userPhone ? userPhone.replace(/\D/g, '') : '';
-  const localLockers = getLocalLockers();
-  
-  for (const l of localLockers) {
-    if (l.id !== lockerId && l.status === 'ASSIGNED') {
-      const matchId = userId && l.assignedToUserId === userId;
-      const matchPhone = normalizedPhone && l.assignedToUserPhone && l.assignedToUserPhone.replace(/\D/g, '') === normalizedPhone;
-      if (matchId || matchPhone) {
-        console.log(`Auto-releasing previous locker ${l.id} (${l.lockerNumber}) for student ${userName}`);
-        await releaseLockerInFirestore(l.id);
-      }
-    }
-  }
-
-  // Also query Firestore directly to ensure no orphaned locks exist in DB
-  try {
-    const snap = await getDocs(collection(db, 'lockers'));
-    for (const d of snap.docs) {
-      if (d.id !== lockerId) {
-        const data = d.data();
-        if (data.status === 'ASSIGNED') {
-          const matchId = userId && data.assignedToUserId === userId;
-          const matchPhone = normalizedPhone && data.assignedToUserPhone && data.assignedToUserPhone.replace(/\D/g, '') === normalizedPhone;
-          if (matchId || matchPhone) {
-            await releaseLockerInFirestore(d.id);
-          }
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('Locker pre-cleanup check warning:', err.message);
-  }
-
   const generatedPin = pinCode || `${Math.floor(1000 + Math.random() * 9000)}`;
   const updatedData = {
     status: 'ASSIGNED',
@@ -166,16 +132,41 @@ export const assignLockerInFirestore = async (lockerId, { userId, userName, user
     updatedAt: new Date().toISOString()
   };
 
-  // Update local state immediately
-  const updatedLocal = getLocalLockers().map(l => 
-    l.id === lockerId ? { ...l, ...updatedData } : l
-  );
-  saveLocalLockers(updatedLocal);
-
-  // Write to Firestore — use setDoc merge to handle both existing and missing docs
+  // Claim the locker atomically so two admins cannot assign the same available unit.
   try {
     const lockerRef = doc(db, 'lockers', lockerId);
-    await setDoc(lockerRef, updatedData, { merge: true });
+    let previousLockerId = null;
+    await runTransaction(db, async (transaction) => {
+      const lockerSnap = await transaction.get(lockerRef);
+      if (!lockerSnap.exists()) throw new Error('Locker not found.');
+      const currentLocker = lockerSnap.data();
+      const alreadyOwned = currentLocker.status === 'ASSIGNED' && userId && currentLocker.assignedToUserId === userId;
+      if (currentLocker.status !== 'AVAILABLE' && !alreadyOwned) {
+        throw new Error(`${currentLocker.lockerNumber || 'This locker'} is no longer available.`);
+      }
+
+      const lockerQuery = await transaction.get(collection(db, 'lockers'));
+      lockerQuery.forEach(snapshot => {
+        const data = snapshot.data();
+        if (snapshot.id !== lockerId && data.status === 'ASSIGNED' && userId && data.assignedToUserId === userId) {
+          previousLockerId = snapshot.id;
+          transaction.update(snapshot.ref, {
+            status: 'AVAILABLE', assignedToUserId: null, assignedToUserName: null,
+            assignedToUserPhone: null, assignedToUserEmail: null, assignedSeatNumber: null,
+            passType: null, pinCode: null, notes: '', startDate: null, endDate: null,
+            updatedAt: new Date().toISOString()
+          });
+        }
+      });
+      transaction.set(lockerRef, updatedData, { merge: true });
+    });
+
+    const updatedLocal = getLocalLockers().map(l => {
+      if (l.id === lockerId) return { ...l, ...updatedData };
+      if (l.id === previousLockerId) return { ...l, status: 'AVAILABLE', assignedToUserId: null, assignedToUserName: null, assignedToUserPhone: null, assignedToUserEmail: null, assignedSeatNumber: null, passType: null, pinCode: null, notes: '', startDate: null, endDate: null };
+      return l;
+    });
+    saveLocalLockers(updatedLocal);
     console.log(`✅ Locker ${lockerId} assigned to ${userName} in Firestore. PIN: ${generatedPin}`);
     return { success: true, pinCode: generatedPin };
   } catch (error) {

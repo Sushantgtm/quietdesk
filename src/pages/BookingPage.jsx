@@ -3,14 +3,13 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { Header } from '../components/layout/Header';
 import { Footer } from '../components/layout/Footer';
 import { useBooking } from '../context/BookingContext';
-import { ACCESS_PLANS } from '../services/mock/mockData';
 import { CheckCircle2, User, Mail, Phone, Calendar, ArrowRight, ArrowLeft, ShieldCheck, Ticket, Sparkles, Lock, Clock, Camera } from 'lucide-react';
 import { calculatePackageEndDate } from '../utils/dateUtils';
 
 export const BookingPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { seats, createBooking } = useBooking();
+  const { seats, plans, createBooking } = useBooking();
 
   const urlSeatId = searchParams.get('seat');
   const urlPlanId = searchParams.get('plan');
@@ -66,7 +65,7 @@ export const BookingPage = () => {
 
   const [step, setStep] = useState(1);
   const [selectedSeatId, setSelectedSeatId] = useState(urlSeatId || '');
-  const [selectedPassType, setSelectedPassType] = useState(urlPlanId ? urlPlanId.toUpperCase() : 'DAILY');
+  const [selectedPassType, setSelectedPassType] = useState(urlPlanId ? urlPlanId.toLowerCase() : '');
   const [includeLocker, setIncludeLocker] = useState(false);
   const [startDate, setStartDate] = useState(todayLocalDate);
   const [arrivalTime, setArrivalTime] = useState(getNext15MinSlot());
@@ -137,19 +136,34 @@ export const BookingPage = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [step]);
 
-  const selectedSeatObj = seats.find(s => s.id === selectedSeatId) || seats.find(s => s.status === 'AVAILABLE');
+  const activePlans = useMemo(
+    () => (plans || []).filter(plan => !['INACTIVE', 'ARCHIVED', 'DISABLED'].includes(String(plan.status || '').toUpperCase())),
+    [plans]
+  );
+  const selectedPlan = activePlans.find(plan => plan.id === selectedPassType);
+  const selectedSeatObj = seats.find(s => s.id === selectedSeatId);
+
+  useEffect(() => {
+    if (urlPlanId && activePlans.some(plan => plan.id === urlPlanId)) {
+      setSelectedPassType(urlPlanId);
+    }
+  }, [urlPlanId, activePlans]);
+
+  const getPlanPrice = (plan) => {
+    if (!plan) return 0;
+    const numericPrice = Number(String(plan.price ?? '').replace(/[^\d.]/g, ''));
+    return Number.isFinite(numericPrice) ? numericPrice : 0;
+  };
+
+  const getPlanLabel = (plan) => plan?.name || plan?.title || 'Access Package';
 
   const getLockerFee = () => {
-    if (!includeLocker) return 0;
-    if (selectedPassType === 'WEEKLY') return 300;
-    if (selectedPassType === 'MONTHLY') return 1000;
-    return 0;
+    if (!includeLocker || !selectedPlan) return 0;
+    return Number(selectedPlan.lockerPrice) || 0;
   };
 
   const calculateBasePrice = () => {
-    if (selectedPassType === 'WEEKLY') return 2800;
-    if (selectedPassType === 'MONTHLY') return 9500;
-    return selectedSeatObj ? selectedSeatObj.pricePerDay : 500;
+    return getPlanPrice(selectedPlan);
   };
 
   const calculateTotal = () => {
@@ -160,8 +174,8 @@ export const BookingPage = () => {
 
   const handleNextStep = (e) => {
     e.preventDefault();
-    if (step === 1 && (!selectedSeatObj || selectedSeatObj.status !== 'AVAILABLE')) {
-      alert('Please select an available desk to proceed.');
+    if (step === 1 && (!selectedPlan || !selectedSeatObj || selectedSeatObj.status !== 'AVAILABLE')) {
+      alert('Please select an active package and an available desk to proceed.');
       return;
     }
     if (step === 2) {
@@ -191,8 +205,13 @@ export const BookingPage = () => {
         seatId: selectedSeatObj.id,
         seatNumber: selectedSeatObj.seatNumber,
         zone: selectedSeatObj.zone || '',
-        passType: selectedPassType,
-        hasLocker: includeLocker && selectedPassType !== 'DAILY',
+        passType: selectedPassType.toUpperCase(),
+        packageId: selectedPlan.id,
+        packageName: getPlanLabel(selectedPlan),
+        packagePrice: calculateBasePrice(),
+        hasLocker: includeLocker,
+        lockerRequired: includeLocker,
+        lockerNumber: '',
         lockerFee: getLockerFee(),
         startDate: startDate,
         endDate: calculatedEndDate,
@@ -271,52 +290,33 @@ export const BookingPage = () => {
                 Select an open desk and access duration for your Kathmandu study session.
               </p>
 
-              {/* Pass Type Selector */}
+              {/* Package Selector */}
               <div style={{ marginBottom: '2rem' }}>
                 <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--primary)' }}>
-                  1. Select Access Pass Duration
+                  1. Select Package
                 </label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
-                  {[
-                    { type: 'DAILY', label: 'Daily Pass', price: 'NPR 500 / day', lockerText: 'Locker on request' },
-                    { type: 'WEEKLY', label: 'Weekly Pass', price: 'NPR 2,800 / wk', lockerText: 'Locker available' },
-                    { type: 'MONTHLY', label: 'Monthly Membership', price: 'NPR 9,500 / mo', lockerText: 'Locker available' }
-                  ].map((plan) => (
-                    <button
-                      key={plan.type}
-                      type="button"
-                      onClick={() => {
-                        setSelectedPassType(plan.type);
-                        if (plan.type === 'DAILY') setIncludeLocker(false);
-                      }}
-                      style={{
-                        padding: '1.25rem 1rem',
-                        borderRadius: 'var(--radius-lg)',
-                        border: selectedPassType === plan.type ? '2px solid var(--accent)' : '1px solid var(--border-subtle)',
-                        backgroundColor: selectedPassType === plan.type ? 'var(--accent-light)' : 'var(--bg-surface)',
-                        textAlign: 'left',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <div style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '0.25rem' }}>{plan.label}</div>
-                      {/* Price hidden per owner's request — data retained */}
-                      <div style={{ display: 'none', fontSize: '0.85rem', color: 'var(--accent-hover)', fontWeight: 600 }}>{plan.price}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                        🔒 {plan.lockerText}
-                      </div>
-                    </button>
+                <select
+                  required
+                  value={selectedPassType}
+                  onChange={e => setSelectedPassType(e.target.value)}
+                  style={{ width: '100%', padding: '0.9rem 1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', fontSize: '1rem', backgroundColor: 'var(--bg-surface)' }}
+                >
+                  <option value="">Select an active package</option>
+                  {activePlans.map(plan => (
+                    <option key={plan.id} value={plan.id}>
+                      {getPlanLabel(plan)}
+                    </option>
                   ))}
-                </div>
+                </select>
               </div>
 
               {/* Locker Facility Selector Option */}
               <div style={{ marginBottom: '2rem' }}>
                 <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--primary)' }}>
-                  2. Key Locker Facility Option
+                  2. Locker
                 </label>
-                {selectedPassType === 'WEEKLY' || selectedPassType === 'MONTHLY' ? (
-                  <div
-                    onClick={() => setIncludeLocker(!includeLocker)}
+                <div
+                  onClick={() => setIncludeLocker(!includeLocker)}
                     style={{
                       padding: '1.25rem 1.5rem',
                       borderRadius: 'var(--radius-lg)',
@@ -345,15 +345,10 @@ export const BookingPage = () => {
                       </div>
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          Add Secure Key Locker Facility
-                          {includeLocker && (
-                            <span style={{ fontSize: '0.75rem', backgroundColor: 'var(--accent)', color: 'var(--primary)', padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-full)', fontWeight: 800 }}>
-                              ADDED
-                            </span>
-                          )}
+                          I need a locker
                         </div>
                         <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-                          Physical key locker to safely store your books &amp; personal tech.
+                          Locker will be assigned by our team based on availability.
                         </div>
                       </div>
                     </div>
@@ -364,28 +359,12 @@ export const BookingPage = () => {
                       style={{ width: '20px', height: '20px', accentColor: 'var(--accent-hover)', cursor: 'pointer' }}
                     />
                   </div>
-                ) : (
-                  <div style={{
-                    padding: '1rem 1.25rem',
-                    borderRadius: 'var(--radius-lg)',
-                    backgroundColor: 'var(--bg-main)',
-                    border: '1px solid var(--border-subtle)',
-                    fontSize: '0.875rem',
-                    color: 'var(--text-muted)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem'
-                  }}>
-                    <Lock size={18} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                    <span>Key lockers are available on-site upon request at reception desk. Select <strong>Weekly</strong> or <strong>Monthly</strong> package to reserve a personal key locker.</span>
-                  </div>
-                )}
-              </div>
+                </div>
 
               {/* Desk Selector */}
               <div style={{ marginBottom: '2.5rem' }}>
                 <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--primary)' }}>
-                  3. Select Available Desk Station
+                  3. Select Available Seat / Cabin
                 </label>
                 <div style={{
                   display: 'grid',
@@ -453,7 +432,7 @@ export const BookingPage = () => {
                   <div>
                     <div style={{ fontSize: '0.85rem', color: 'var(--accent-hover)', fontWeight: 600 }}>Selected Configuration</div>
                     <div style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--primary)' }}>
-                      Desk {selectedSeatObj.seatNumber} • {selectedSeatObj.zone} ({selectedPassType})
+                      Desk {selectedSeatObj.seatNumber} • {selectedSeatObj.zone} ({getPlanLabel(selectedPlan)})
                     </div>
                     {/* Price hidden per owner's request — data retained */}
                     <div style={{ display: 'none', fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
@@ -711,7 +690,7 @@ export const BookingPage = () => {
                   </div>
                   <div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Access Duration</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--primary)' }}>{selectedPassType} Pass</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--primary)' }}>{getPlanLabel(selectedPlan)}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Key Locker Facility</div>
