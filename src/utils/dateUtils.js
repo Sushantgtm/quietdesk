@@ -28,16 +28,25 @@ export const formatLocalDate = (date) => {
 
 // Get exact number of days for a package id, name, or pricing-plan object.
 export const getPackageDays = (packageValue) => {
+  if (typeof packageValue === 'number' && Number.isFinite(packageValue)) {
+    return Math.max(1, Math.round(packageValue));
+  }
+
   const source = typeof packageValue === 'object' && packageValue !== null
-    ? [packageValue.id, packageValue.name, packageValue.title, packageValue.duration, packageValue.period].filter(Boolean).join(' ')
+    ? [packageValue.id, packageValue.name, packageValue.title, packageValue.duration, packageValue.period]
+      .filter(value => value !== null && value !== undefined)
+      .map(value => String(value))
+      .join(' ')
     : String(packageValue || '');
   const normalized = source.toLowerCase();
-  const explicitDuration = normalized.match(/(\d+)\s*(day|days|week|weeks|month|months)/);
+  const explicitDuration = normalized.match(/(\d+)\s*[- ]?\s*(day|days|week|weeks|month|months)/);
 
   if (explicitDuration) {
     const amount = Number(explicitDuration[1]);
     const unit = explicitDuration[2];
-    return unit.startsWith('week') ? amount * 7 : unit.startsWith('month') ? amount * 30 : amount;
+    if (Number.isFinite(amount) && amount > 0) {
+      return unit.startsWith('week') ? amount * 7 : unit.startsWith('month') ? amount * 30 : amount;
+    }
   }
   if (/week|weekly/.test(normalized)) return 7;
   if (/month|monthly/.test(normalized)) return 30;
@@ -53,6 +62,7 @@ export const getPackageDays = (packageValue) => {
 export const calculatePackageEndDate = (startDateStr, packageValue) => {
   const d = parseLocalDate(startDateStr);
   const days = getPackageDays(packageValue);
+  if (Number.isNaN(d.getTime())) return '';
   d.setDate(d.getDate() + days);
   return formatLocalDate(d);
 };

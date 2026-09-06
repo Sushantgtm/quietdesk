@@ -28,7 +28,7 @@ export const BookingPage = () => {
   // Helper to calculate expected expiry date based on start date and pass tier (unified dateUtils)
   const calculateExpectedEndDate = (startStr, passType) => {
     if (!startStr) return '';
-    return calculatePackageEndDate(startStr, selectedPlan || passType);
+    return calculatePackageEndDate(startStr, passType);
   };
 
   // Helper to compute next 15-minute slot for current local time
@@ -142,6 +142,9 @@ export const BookingPage = () => {
   );
   const selectedPlan = activePlans.find(plan => String(plan.id).toLowerCase() === String(selectedPassType).toLowerCase());
   const selectedSeatObj = seats.find(s => s.id === selectedSeatId);
+  const selectedPackageValue = selectedPlan || selectedPassType;
+  const selectedPackageDays = getPackageDays(selectedPackageValue);
+  const selectedExpiryDate = calculateExpectedEndDate(startDate, selectedPackageValue);
 
   useEffect(() => {
     const matchingPlan = activePlans.find(plan => String(plan.id).toLowerCase() === String(urlPlanId || '').toLowerCase());
@@ -712,7 +715,7 @@ export const BookingPage = () => {
                   <div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Valid Until / Expiry</div>
                     <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--accent-hover)' }}>
-                      📅 {calculateExpectedEndDate(startDate, selectedPlan || selectedPassType)} ({getPackageDays(selectedPlan || selectedPassType)} Days)
+                      📅 {selectedExpiryDate} ({selectedPackageDays} Days)
                     </div>
                   </div>
                   <div>
