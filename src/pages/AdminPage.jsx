@@ -92,7 +92,8 @@ export const AdminPage = () => {
 
   const calculateExpectedAdminEndDate = (startStr, passType) => {
     if (!startStr) return '';
-    return calculatePackageEndDate(startStr, passType);
+    const plan = plans.find(item => String(item.id).toLowerCase() === String(passType).toLowerCase());
+    return calculatePackageEndDate(startStr, plan || passType);
   };
 
   const [showReservationModal, setShowReservationModal] = useState(false);
@@ -100,7 +101,7 @@ export const AdminPage = () => {
     userId: '', userName: '', userEmail: '', userPhone: '',
     seatId: '', seatNumber: '', shift: 'FULL_DAY', bookingTime: '06:00 AM - 09:00 PM',
     passType: 'DAILY', startDate: new Date().toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0], totalAmount: 350,
+    endDate: calculatePackageEndDate(new Date().toISOString().split('T')[0], 'DAILY'), totalAmount: 350,
     advanceAmount: 0, amountPaid: 0, pendingAmount: 350, paymentStatus: 'PAID', hasLocker: false
   });
 
@@ -528,7 +529,7 @@ export const AdminPage = () => {
         userId: '', userName: '', userEmail: '', userPhone: '',
         seatId: '', seatNumber: '', shift: 'FULL_DAY', bookingTime: '06:00 AM - 09:00 PM',
         passType: 'DAILY', startDate: new Date().toISOString().split('T')[0],
-        endDate: new Date().toISOString().split('T')[0], totalAmount: 350,
+        endDate: calculatePackageEndDate(new Date().toISOString().split('T')[0], 'DAILY'), totalAmount: 350,
         advanceAmount: 0, amountPaid: 0, pendingAmount: 350, paymentStatus: 'PAID', hasLocker: false
       });
       alert(bookingStatus === 'CONFIRMED' ? '✅ Cabin successfully booked and occupied!' : '✅ Reservation successfully created!');

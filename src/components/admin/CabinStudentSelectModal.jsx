@@ -57,7 +57,7 @@ export const CabinStudentSelectModal = ({
       setShift('FULL_DAY');
       const t = new Date().toISOString().split('T')[0];
       setStartDate(t);
-      setEndDate(t);
+      setEndDate(computeEndDate(t, 'DAILY'));
       setHasLocker(false);
       setLockerNumber('');
       setPaymentMethod('CASH');

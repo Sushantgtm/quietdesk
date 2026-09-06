@@ -28,7 +28,8 @@ export const ReservationConfirmModal = ({
 
   const computeExpectedEndDate = (startStr, pt) => {
     if (!startStr) return '';
-    return calculatePackageEndDate(startStr, pt);
+    const plan = plans.find(item => item.id === String(pt).toLowerCase());
+    return calculatePackageEndDate(startStr, plan || pt);
   };
 
   useEffect(() => {
@@ -40,7 +41,8 @@ export const ReservationConfirmModal = ({
       const today = new Date().toISOString().split('T')[0];
       const start = booking.startDate || today;
       setStartDate(start);
-      setEndDate(booking.endDate || computeExpectedEndDate(start, pt));
+      const expectedEnd = computeExpectedEndDate(start, pt);
+      setEndDate(!booking.endDate || booking.endDate === start ? expectedEnd : booking.endDate);
       setArrivalTime(booking.arrivalTime || booking.bookingTime || '06:00 AM');
       setHasLocker(!!booking.hasLocker);
       setLockerNumber(booking.lockerNumber || '');

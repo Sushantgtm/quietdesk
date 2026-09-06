@@ -47,7 +47,7 @@ export const RegisterNewStudentModal = ({
     passType: 'daily',
     customPrice: '',
     startDate: today,
-    endDate: today,
+    endDate: calculatePackageEndDate(today, 'DAILY'),
     hasLocker: false,
     lockerNumber: '',
     parkingNeeded: false,
@@ -82,16 +82,7 @@ export const RegisterNewStudentModal = ({
   const calculateEndDate = (startStr, passType) => {
     if (!startStr) return '';
     const plan = getPlan(passType);
-    const duration = String(plan?.duration || plan?.period || '').toLowerCase();
-    const durationMatch = duration.match(/(\d+)\s*(day|week|month)/);
-    if (durationMatch) {
-      const date = new Date(`${startStr}T12:00:00`);
-      const amount = Number(durationMatch[1]);
-      const unit = durationMatch[2];
-      date.setDate(date.getDate() + (unit === 'week' ? amount * 7 : unit === 'month' ? amount * 30 : amount));
-      return date.toISOString().split('T')[0];
-    }
-    return calculatePackageEndDate(startStr, passType);
+    return calculatePackageEndDate(startStr, plan || passType);
   };
 
   // Pricing helper
@@ -148,7 +139,7 @@ export const RegisterNewStudentModal = ({
           passType: activePlans[0]?.id || 'daily',
           customPrice: String(getPlanPrice(activePlans[0])),
           startDate: today,
-          endDate: today,
+          endDate: calculateEndDate(today, initialPlanId),
           hasLocker: false,
           lockerNumber: '',
           parkingNeeded: false,
@@ -176,7 +167,7 @@ export const RegisterNewStudentModal = ({
           passType: activePlans[0]?.id || 'daily',
           customPrice: String(getPlanPrice(activePlans[0])),
           startDate: today,
-          endDate: today,
+          endDate: calculateEndDate(today, initialPlanId),
           hasLocker: false,
           lockerNumber: '',
           parkingNeeded: false,
@@ -196,7 +187,9 @@ export const RegisterNewStudentModal = ({
 
   const populateFromBooking = (b) => {
     setSelectedPendingId(b.id);
-    const calculatedEnd = b.endDate || calculateEndDate(b.startDate || today, b.passType || 'DAILY');
+    const bookingStart = b.startDate || today;
+    const expectedEnd = calculateEndDate(bookingStart, b.passType || 'DAILY');
+    const calculatedEnd = !b.endDate || b.endDate === bookingStart ? expectedEnd : b.endDate;
     const bookingPlanId = b.packageId || b.passType || activePlans[0]?.id || 'daily';
     const pPrice = calculatePricing(bookingPlanId, b.seatId, !!b.hasLocker, b.customPrice ?? '');
 
@@ -245,7 +238,7 @@ export const RegisterNewStudentModal = ({
         passType: activePlans[0]?.id || 'daily',
         customPrice: String(getPlanPrice(activePlans[0])),
         startDate: today,
-        endDate: today,
+        endDate: calculateEndDate(today, initialPlanId),
         hasLocker: false,
         lockerNumber: '',
           amountPaid: String(pPrice.totalAmount)

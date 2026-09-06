@@ -5,6 +5,7 @@ import {
   Briefcase, Sparkles, User, Hash, Search
 } from 'lucide-react';
 import { useBooking } from '../../context/BookingContext';
+import { calculatePackageEndDate } from '../../utils/dateUtils';
 
 export const WalkinStudentModal = ({
   isOpen,
@@ -45,21 +46,8 @@ export const WalkinStudentModal = ({
   // Helper to compute end date based on pass type (timezone-safe)
   function calculateInitialEndDate(startStr, passType) {
     if (!startStr) return '';
-    const parts = startStr.split('-').map(Number);
-    if (parts.length !== 3 || isNaN(parts[0])) return startStr;
-    const date = new Date(parts[0], parts[1] - 1, parts[2]);
-    
-    if (passType === 'DAILY') {
-      return startStr;
-    } else if (passType === 'WEEKLY') {
-      date.setDate(date.getDate() + 7);
-    } else if (passType === 'MONTHLY') {
-      date.setDate(date.getDate() + 30);
-    }
-    const yr = date.getFullYear();
-    const mo = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${yr}-${mo}-${day}`;
+    const plan = plans.find(item => String(item.id).toLowerCase() === String(passType).toLowerCase());
+    return calculatePackageEndDate(startStr, plan || passType);
   }
 
   // Shift timing presets (Operating hours: 6:00 AM - 9:00 PM)

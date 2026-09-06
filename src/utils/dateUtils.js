@@ -26,11 +26,21 @@ export const formatLocalDate = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-// Get exact number of days for each package
-export const getPackageDays = (passType) => {
-  const pt = String(passType || '').toUpperCase();
-  if (pt === 'WEEKLY') return 7;
-  if (pt === 'MONTHLY') return 30;
+// Get exact number of days for a package id, name, or pricing-plan object.
+export const getPackageDays = (packageValue) => {
+  const source = typeof packageValue === 'object' && packageValue !== null
+    ? [packageValue.id, packageValue.name, packageValue.title, packageValue.duration, packageValue.period].filter(Boolean).join(' ')
+    : String(packageValue || '');
+  const normalized = source.toLowerCase();
+  const explicitDuration = normalized.match(/(\d+)\s*(day|days|week|weeks|month|months)/);
+
+  if (explicitDuration) {
+    const amount = Number(explicitDuration[1]);
+    const unit = explicitDuration[2];
+    return unit.startsWith('week') ? amount * 7 : unit.startsWith('month') ? amount * 30 : amount;
+  }
+  if (/week|weekly/.test(normalized)) return 7;
+  if (/month|monthly/.test(normalized)) return 30;
   return 1; // DAILY is exactly 1 full day (e.g. Sep 4 -> Sep 5)
 };
 
@@ -40,9 +50,9 @@ export const getPackageDays = (passType) => {
  * - WEEKLY: +7 days (Start: Sep 4 -> Expiry: Sep 11)
  * - MONTHLY: +30 days (Start: Sep 4 -> Expiry: Oct 4)
  */
-export const calculatePackageEndDate = (startDateStr, passType) => {
+export const calculatePackageEndDate = (startDateStr, packageValue) => {
   const d = parseLocalDate(startDateStr);
-  const days = getPackageDays(passType);
+  const days = getPackageDays(packageValue);
   d.setDate(d.getDate() + days);
   return formatLocalDate(d);
 };

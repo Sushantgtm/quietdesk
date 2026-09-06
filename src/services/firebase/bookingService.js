@@ -4,7 +4,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { findOrCreateStudentFirestore } from './userService';
-import { calculateRenewalEndDate } from '../../utils/dateUtils';
+import { calculatePackageEndDate, calculateRenewalEndDate } from '../../utils/dateUtils';
 
 // ─── localStorage cache helpers (UI cache ONLY — not authoritative source) ───
 const CACHE_KEY = 'quietdesk_bookings_cache_v7';
@@ -81,7 +81,7 @@ export const createBooking = async (bookingData) => {
   const bookingId   = 'BK-' + Date.now();
   const bookingCode = 'QD-' + Math.floor(1000 + Math.random() * 9000);
   const startDate   = bookingData.startDate || new Date().toISOString().split('T')[0];
-  const endDate     = bookingData.endDate   || startDate;
+  const endDate     = bookingData.endDate   || calculatePackageEndDate(startDate, bookingData.packageDuration || bookingData.packageName || bookingData.passType);
 
   // 2. Resolve student (Firestore query, not localStorage)
   let userId   = bookingData.userId   || null;
@@ -230,7 +230,7 @@ export const approveBooking = async (bookingId, approvalData = {}) => {
 
     const now         = new Date().toISOString();
     const startDate   = approvalData.startDate   || booking.startDate   || now.split('T')[0];
-    const endDate     = approvalData.endDate     || booking.endDate     || startDate;
+    const endDate     = approvalData.endDate     || booking.endDate     || calculatePackageEndDate(startDate, approvalData.packageDuration || booking.packageName || passType);
     const passType    = approvalData.passType    || booking.passType    || 'DAILY';
     const seatNumber  = seatSnap.data().seatNumber || booking.seatNumber || '';
     const totalAmount = approvalData.totalAmount !== undefined ? approvalData.totalAmount : (booking.totalAmount || 0);

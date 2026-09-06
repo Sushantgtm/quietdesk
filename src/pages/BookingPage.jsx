@@ -28,7 +28,7 @@ export const BookingPage = () => {
   // Helper to calculate expected expiry date based on start date and pass tier (unified dateUtils)
   const calculateExpectedEndDate = (startStr, passType) => {
     if (!startStr) return '';
-    return calculatePackageEndDate(startStr, passType);
+    return calculatePackageEndDate(startStr, selectedPlan || passType);
   };
 
   // Helper to compute next 15-minute slot for current local time
