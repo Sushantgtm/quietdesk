@@ -32,8 +32,21 @@ export const getPackageDays = (packageValue) => {
     return Math.max(1, Math.round(packageValue));
   }
 
+  const identity = typeof packageValue === 'object' && packageValue !== null
+    ? [packageValue.id, packageValue.name, packageValue.title]
+      .filter(value => value !== null && value !== undefined)
+      .map(value => String(value))
+      .join(' ')
+      .toLowerCase()
+    : String(packageValue || '').toLowerCase();
+
+  // Standard packages always use their canonical identity, regardless of CMS metadata.
+  if (/weekly|week/.test(identity)) return 7;
+  if (/monthly|month/.test(identity)) return 30;
+  if (/daily|day/.test(identity)) return 1;
+
   const source = typeof packageValue === 'object' && packageValue !== null
-    ? [packageValue.id, packageValue.name, packageValue.title, packageValue.duration, packageValue.period]
+    ? [packageValue.duration, packageValue.period]
       .filter(value => value !== null && value !== undefined)
       .map(value => String(value))
       .join(' ')
