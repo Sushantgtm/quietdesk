@@ -93,7 +93,20 @@ export const BookingProvider = ({ children }) => {
   // Locker Management
   const assignLocker = async (lockerId, assignmentData) => {
     const res = await assignLockerInFirestore(lockerId, assignmentData);
-    setLockers(prev => prev.map(l => l.id === lockerId ? { ...l, status: 'ASSIGNED', ...assignmentData } : l));
+    if (!res?.success) {
+      throw new Error(res?.error || 'This locker could not be assigned. It may no longer be available.');
+    }
+    setLockers(prev => prev.map(l => l.id === lockerId ? {
+      ...l,
+      status: 'ASSIGNED',
+      ...assignmentData,
+      assignedToUserId: assignmentData.userId || null,
+      assignedToUserName: assignmentData.userName || 'Scholar',
+      assignedToUserPhone: assignmentData.userPhone || '',
+      assignedToUserEmail: assignmentData.userEmail || '',
+      assignedSeatNumber: assignmentData.seatNumber || '',
+      pinCode: res.pinCode || assignmentData.pinCode || l.pinCode
+    } : l));
     return res;
   };
 

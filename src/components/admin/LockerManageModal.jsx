@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Lock, Key, User, Phone, Mail, Calendar, Shield, AlertTriangle, CheckCircle2, UserPlus, Search, Sliders, RefreshCw } from 'lucide-react';
 import { useBooking } from '../../context/BookingContext';
 import { useNotification } from '../notifications/useNotification';
 import { getFriendlyErrorMessage } from '../../utils/notificationMessages';
+import { calculatePackageEndDate } from '../../utils/dateUtils';
 
 export const LockerManageModal = ({
   isOpen,
@@ -10,7 +11,8 @@ export const LockerManageModal = ({
   locker,
   onAssignLocker,
   onReleaseLocker,
-  onUpdateStatus
+  onUpdateStatus,
+  onViewProfile
 }) => {
   const { users, seats, lockers } = useBooking();
   const { error, warning, success, confirm } = useNotification();
@@ -22,6 +24,14 @@ export const LockerManageModal = ({
   const [notes, setNotes] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState('DETAILS'); // 'DETAILS' | 'ASSIGN'
+
+  const getStudentPackage = (student) => student?.packageId || student?.passType || student?.packageName || 'MONTHLY';
+  const getStudentStartDate = (student) => student?.startDate || student?.joinedDate?.split('T')[0] || new Date().toISOString().split('T')[0];
+  const getStudentEndDate = (student) => student?.endDate || calculatePackageEndDate(getStudentStartDate(student), getStudentPackage(student));
+
+  useEffect(() => {
+    if (selectedStudent) setPassType(String(getStudentPackage(selectedStudent)).toUpperCase());
+  }, [selectedStudent]);
 
   if (!isOpen || !locker) return null;
 
@@ -73,6 +83,8 @@ export const LockerManageModal = ({
         userEmail: selectedStudent.email || '',
         seatNumber: selectedSeatNumber || selectedStudent.seatNumber || selectedStudent.assignedSeat || '',
         passType,
+        startDate: getStudentStartDate(selectedStudent),
+        endDate: getStudentEndDate(selectedStudent),
         pinCode: pinToUse,
         notes
       });
@@ -174,6 +186,7 @@ export const LockerManageModal = ({
               <div style={{ fontSize: '1.15rem', fontWeight: 800 }}>
                 {locker.label || locker.lockerNumber} • Storage Management
               </div>
+
               <div style={{ fontSize: '0.78rem', color: '#94A3B8' }}>
                 Physical Key Storage Locker Unit
               </div>
@@ -293,6 +306,29 @@ export const LockerManageModal = ({
                 <div style={{ marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px solid #E2E8F0', fontSize: '0.8rem', color: '#64748B' }}>
                   <strong>Notes:</strong> {locker.notes}
                 </div>
+              )}
+
+              {onViewProfile && (locker.assignedToUserId || locker.assignedToUserName) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const assignedUser = users.find(user => user.id === locker.assignedToUserId);
+                    onViewProfile(assignedUser || {
+                      id: locker.assignedToUserId,
+                      fullName: locker.assignedToUserName,
+                      name: locker.assignedToUserName,
+                      phone: locker.assignedToUserPhone,
+                      email: locker.assignedToUserEmail
+                    });
+                  }}
+                  style={{
+                    marginTop: '1rem', padding: '0.6rem 0.85rem', borderRadius: '8px',
+                    border: '1px solid #93C5FD', backgroundColor: '#FFFFFF', color: '#1D4ED8',
+                    fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.4rem'
+                  }}
+                >
+                  <User size={15} /> View Student Profile
+                </button>
               )}
             </div>
           )}
@@ -426,29 +462,10 @@ export const LockerManageModal = ({
 
                   <div>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '0.2rem' }}>
-                      Membership Duration Pass
+                      Membership Package and Duration
                     </label>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      {['DAILY', 'WEEKLY', 'MONTHLY'].map(t => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => setPassType(t)}
-                          style={{
-                            flex: 1,
-                            padding: '0.45rem',
-                            borderRadius: '6px',
-                            border: passType === t ? '2px solid #2563EB' : '1px solid #CBD5E1',
-                            backgroundColor: passType === t ? '#DBEAFE' : '#FFFFFF',
-                            color: passType === t ? '#1E40AF' : '#475569',
-                            fontWeight: 700,
-                            fontSize: '0.78rem',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          {t}
-                        </button>
-                      ))}
+                    <div style={{ padding: '0.65rem 0.75rem', borderRadius: '6px', border: '1px solid #93C5FD', backgroundColor: '#EFF6FF', color: '#1E40AF', fontWeight: 800, fontSize: '0.82rem' }}>
+                      {selectedStudent.packageName || selectedStudent.planName || passType} · {getStudentStartDate(selectedStudent)} to {getStudentEndDate(selectedStudent)}
                     </div>
                   </div>
                 </div>

@@ -170,8 +170,38 @@ export const assignLockerInFirestore = async (lockerId, { userId, userName, user
     console.log(`✅ Locker ${lockerId} assigned to ${userName} in Firestore. PIN: ${generatedPin}`);
     return { success: true, pinCode: generatedPin };
   } catch (error) {
-    console.warn('Firestore locker assignment failed, local state updated:', error.message);
-    return { success: false, pinCode: generatedPin };
+    const localLockers = getLocalLockers();
+    const localLocker = localLockers.find(l => l.id === lockerId);
+    const alreadyOwned = localLocker?.status === 'ASSIGNED' && userId && localLocker.assignedToUserId === userId;
+
+    if (!localLocker || (localLocker.status !== 'AVAILABLE' && !alreadyOwned)) {
+      console.warn('Locker assignment rejected locally after Firestore failure:', error.message);
+      return { success: false, pinCode: generatedPin, error: error.message };
+    }
+
+    const updatedLocal = localLockers.map(l => {
+      if (l.id === lockerId) return { ...l, ...updatedData };
+      if (l.id !== lockerId && l.status === 'ASSIGNED' && userId && l.assignedToUserId === userId) {
+        return {
+          ...l,
+          status: 'AVAILABLE',
+          assignedToUserId: null,
+          assignedToUserName: null,
+          assignedToUserPhone: null,
+          assignedToUserEmail: null,
+          assignedSeatNumber: null,
+          passType: null,
+          pinCode: null,
+          notes: '',
+          startDate: null,
+          endDate: null
+        };
+      }
+      return l;
+    });
+    saveLocalLockers(updatedLocal);
+    console.warn('Firestore locker assignment failed; local locker state was saved:', error.message);
+    return { success: true, pinCode: generatedPin, offline: true };
   }
 };
 

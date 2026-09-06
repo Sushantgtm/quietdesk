@@ -413,6 +413,13 @@ export const RegisterNewStudentModal = ({
 
       const { user: studentRecord } = await findOrCreateStudent(studentPayload);
 
+      const matchingLocker = formData.hasLocker
+        ? lockers.find(l => l.lockerNumber === formData.lockerNumber || l.id === formData.lockerNumber)
+        : null;
+      if (formData.hasLocker && !matchingLocker) {
+        throw new Error('The selected locker is no longer available. Please choose another locker.');
+      }
+
       const parsedPaid = Math.min(totalAmount, Math.max(0, Number(formData.amountPaid) || 0));
       const pendingDue = Math.max(0, totalAmount - parsedPaid);
       const paymentStatus = parsedPaid >= totalAmount && totalAmount > 0 ? 'PAID' : parsedPaid > 0 ? 'PARTIAL' : 'PENDING';
@@ -438,6 +445,7 @@ export const RegisterNewStudentModal = ({
           startDate: formData.startDate,
           endDate: formData.endDate,
           hasLocker: formData.hasLocker,
+          lockerId: matchingLocker?.id || null,
           lockerNumber: formData.hasLocker ? formData.lockerNumber : '',
           parkingNeeded: formData.parkingNeeded,
           vehicleNumber: formData.parkingNeeded ? formData.vehicleNumber.trim() : '',
@@ -472,6 +480,7 @@ export const RegisterNewStudentModal = ({
           startDate: formData.startDate,
           endDate: formData.endDate,
           hasLocker: formData.hasLocker,
+          lockerId: matchingLocker?.id || null,
           lockerNumber: formData.hasLocker ? formData.lockerNumber : '',
           parkingNeeded: formData.parkingNeeded,
           vehicleNumber: formData.parkingNeeded ? formData.vehicleNumber.trim() : '',
@@ -495,21 +504,18 @@ export const RegisterNewStudentModal = ({
       await changeSeatStatus(selectedSeatObj.id, 'OCCUPIED');
 
       // 4. Update Locker allocation if applicable
-      if (formData.hasLocker && formData.lockerNumber) {
-        const matchingLocker = lockers.find(l => l.lockerNumber === formData.lockerNumber || l.id === formData.lockerNumber);
-        if (matchingLocker) {
-          await assignLocker(matchingLocker.id, {
-            userId: studentRecord.id,
-            userName: studentRecord.fullName || studentRecord.name,
-            userPhone: studentRecord.phone,
-            userEmail: studentRecord.email,
-            seatNumber: selectedSeatObj.seatNumber,
-            passType: formData.passType,
-            startDate: formData.startDate,
-            endDate: formData.endDate,
-            notes: `Registered student desk ${selectedSeatObj.seatNumber}`
-          });
-        }
+      if (matchingLocker) {
+        await assignLocker(matchingLocker.id, {
+          userId: studentRecord.id,
+          userName: studentRecord.fullName || studentRecord.name,
+          userPhone: studentRecord.phone,
+          userEmail: studentRecord.email,
+          seatNumber: selectedSeatObj.seatNumber,
+          passType: formData.passType,
+          startDate: formData.startDate,
+          endDate: formData.endDate,
+          notes: `Registered student desk ${selectedSeatObj.seatNumber}`
+        });
       }
 
       // 5. Trigger Confirmation Email via integration point

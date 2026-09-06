@@ -477,6 +477,12 @@ export const AdminPage = () => {
       }
 
       const selectedSeatObj = seats.find(s => s.id === reservationForm.seatId);
+      const matchingLocker = reservationForm.hasLocker
+        ? lockers.find(l => l.lockerNumber === reservationForm.lockerNumber || l.id === reservationForm.lockerNumber)
+        : null;
+      if (reservationForm.hasLocker && !matchingLocker) {
+        throw new Error('Please choose an available locker before creating this booking.');
+      }
       const feeInfo = calculateFee({
         passType: reservationForm.passType,
         hasLocker: reservationForm.hasLocker,
@@ -526,6 +532,8 @@ export const AdminPage = () => {
         userPhone: memberPhone,
         userEmail: memberEmail,
         seatNumber: selectedSeatObj ? selectedSeatObj.seatNumber : reservationForm.seatNumber,
+        lockerId: matchingLocker?.id || null,
+        lockerNumber: matchingLocker?.lockerNumber || '',
         bookingCode: `QD-MAN-${Math.floor(1000 + Math.random() * 9000)}`,
         status: bookingStatus,
         totalAmount,
@@ -535,6 +543,19 @@ export const AdminPage = () => {
         paymentStatus,
         createdAt: new Date().toISOString()
       });
+      if (matchingLocker) {
+        await assignLocker(matchingLocker.id, {
+          userId: reservationForm.userId || null,
+          userName: memberName,
+          userPhone: memberPhone,
+          userEmail: memberEmail,
+          seatNumber: selectedSeatObj ? selectedSeatObj.seatNumber : reservationForm.seatNumber,
+          passType: reservationForm.passType,
+          startDate: reservationForm.startDate,
+          endDate: reservationForm.endDate,
+          notes: `Admin booking ${reservationForm.bookingCode || 'manual reservation'}`
+        });
+      }
       if (reservationForm.seatId) {
         await changeSeatStatus(reservationForm.seatId, seatStatus);
       }
@@ -5801,6 +5822,7 @@ export const AdminPage = () => {
           } catch (err) {
             console.error('Error assigning locker:', err);
             error(getFriendlyErrorMessage(err, 'Unable to assign this locker.'), { title: 'Locker Assignment Failed' });
+            throw err;
           }
         }}
         onReleaseLocker={async (lockerId) => {
@@ -5819,6 +5841,20 @@ export const AdminPage = () => {
           } catch (err) {
             console.error('Error updating locker status:', err);
             error(getFriendlyErrorMessage(err, 'Unable to update this locker status.'), { title: 'Locker Update Failed' });
+          }
+        }}
+        onViewProfile={(studentUser) => {
+          setShowLockerModal(false);
+          setSelectedLockerForModal(null);
+          if (studentUser) {
+            const cleanPhone = String(studentUser.phone || '').replace(/\D/g, '');
+            const cleanEmail = String(studentUser.email || '').trim().toLowerCase();
+            const enriched = (allUnifiedUsers || []).find(u =>
+              (studentUser.id && u.id === studentUser.id) ||
+              (cleanPhone && u.phone && String(u.phone).replace(/\D/g, '') === cleanPhone) ||
+              (cleanEmail && u.email && String(u.email).trim().toLowerCase() === cleanEmail)
+            ) || studentUser;
+            setSelectedUserForProfile(enriched);
           }
         }}
       />
