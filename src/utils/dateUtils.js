@@ -32,35 +32,37 @@ export const getPackageDays = (packageValue) => {
     return Math.max(1, Math.round(packageValue));
   }
 
-  const identity = typeof packageValue === 'object' && packageValue !== null
-    ? [packageValue.id, packageValue.name, packageValue.title]
-      .filter(value => value !== null && value !== undefined)
-      .map(value => String(value))
-      .join(' ')
-      .toLowerCase()
-    : String(packageValue || '').toLowerCase();
-
-  // Standard packages always use their canonical identity, regardless of CMS metadata.
-  if (/weekly|week/.test(identity)) return 7;
-  if (/monthly|month/.test(identity)) return 30;
-  if (/daily|day/.test(identity)) return 1;
-
-  const source = typeof packageValue === 'object' && packageValue !== null
+  const isObject = typeof packageValue === 'object' && packageValue !== null;
+  const source = isObject
     ? [packageValue.duration, packageValue.period]
       .filter(value => value !== null && value !== undefined)
       .map(value => String(value))
       .join(' ')
     : String(packageValue || '');
   const normalized = source.toLowerCase();
-  const explicitDuration = normalized.match(/(\d+)\s*[- ]?\s*(day|days|week|weeks|month|months)/);
+  const identity = isObject
+    ? [packageValue.id, packageValue.name, packageValue.title]
+      .filter(value => value !== null && value !== undefined)
+      .map(value => String(value))
+      .join(' ')
+      .toLowerCase()
+    : String(packageValue || '').toLowerCase();
+  const explicitDuration = `${normalized} ${identity}`.match(/(\d+)\s*[- ]?\s*(hour|hours|day|days|week|weeks|month|months)/);
 
   if (explicitDuration) {
     const amount = Number(explicitDuration[1]);
     const unit = explicitDuration[2];
     if (Number.isFinite(amount) && amount > 0) {
+      if (unit.startsWith('hour')) return 1;
       return unit.startsWith('week') ? amount * 7 : unit.startsWith('month') ? amount * 30 : amount;
     }
   }
+
+  // Standard packages always use their canonical identity, regardless of CMS metadata.
+  if (/weekly|week/.test(identity)) return 7;
+  if (/monthly|month/.test(identity)) return 30;
+  if (/daily|day/.test(identity)) return 1;
+
   if (/week|weekly/.test(normalized)) return 7;
   if (/month|monthly/.test(normalized)) return 30;
   return 1; // DAILY is exactly 1 full day (e.g. Sep 4 -> Sep 5)

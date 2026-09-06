@@ -142,7 +142,7 @@ export const BookingPage = () => {
   );
   const selectedPlan = activePlans.find(plan => String(plan.id).toLowerCase() === String(selectedPassType).toLowerCase());
   const selectedSeatObj = seats.find(s => s.id === selectedSeatId);
-  const selectedPackageValue = selectedPlan?.id || selectedPassType;
+  const selectedPackageValue = selectedPlan || selectedPassType;
   const selectedPackageDays = getPackageDays(selectedPackageValue);
   const selectedExpiryDate = calculateExpectedEndDate(startDate, selectedPackageValue);
 
@@ -209,9 +209,10 @@ export const BookingPage = () => {
         seatId: selectedSeatObj.id,
         seatNumber: selectedSeatObj.seatNumber,
         zone: selectedSeatObj.zone || '',
-        passType: String(selectedPackageValue).toUpperCase(),
+        passType: String(selectedPlan.id).toUpperCase(),
         packageId: selectedPlan.id,
         packageName: getPlanLabel(selectedPlan),
+        packageDuration: selectedPackageDays,
         packagePrice: calculateBasePrice(),
         hasLocker: includeLocker,
         lockerRequired: includeLocker,
