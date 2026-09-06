@@ -28,7 +28,7 @@ export const ReservationConfirmModal = ({
 
   const computeExpectedEndDate = (startStr, pt) => {
     if (!startStr) return '';
-    const plan = plans.find(item => item.id === String(pt).toLowerCase());
+    const plan = plans.find(item => String(item.id).toLowerCase() === String(pt || '').toLowerCase());
     return calculatePackageEndDate(startStr, plan || pt);
   };
 

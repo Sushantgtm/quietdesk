@@ -4,7 +4,7 @@ import { Header } from '../components/layout/Header';
 import { Footer } from '../components/layout/Footer';
 import { useBooking } from '../context/BookingContext';
 import { CheckCircle2, User, Mail, Phone, Calendar, ArrowRight, ArrowLeft, ShieldCheck, Ticket, Sparkles, Lock, Clock, Camera } from 'lucide-react';
-import { calculatePackageEndDate } from '../utils/dateUtils';
+import { calculatePackageEndDate, getPackageDays } from '../utils/dateUtils';
 
 export const BookingPage = () => {
   const [searchParams] = useSearchParams();
@@ -140,12 +140,13 @@ export const BookingPage = () => {
     () => (plans || []).filter(plan => !['INACTIVE', 'ARCHIVED', 'DISABLED'].includes(String(plan.status || '').toUpperCase())),
     [plans]
   );
-  const selectedPlan = activePlans.find(plan => plan.id === selectedPassType);
+  const selectedPlan = activePlans.find(plan => String(plan.id).toLowerCase() === String(selectedPassType).toLowerCase());
   const selectedSeatObj = seats.find(s => s.id === selectedSeatId);
 
   useEffect(() => {
-    if (urlPlanId && activePlans.some(plan => plan.id === urlPlanId)) {
-      setSelectedPassType(urlPlanId);
+    const matchingPlan = activePlans.find(plan => String(plan.id).toLowerCase() === String(urlPlanId || '').toLowerCase());
+    if (matchingPlan) {
+      setSelectedPassType(matchingPlan.id);
     }
   }, [urlPlanId, activePlans]);
 
@@ -711,7 +712,7 @@ export const BookingPage = () => {
                   <div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Valid Until / Expiry</div>
                     <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--accent-hover)' }}>
-                      📅 {calculateExpectedEndDate(startDate, selectedPassType)} ({selectedPassType === 'WEEKLY' ? '7 Days' : selectedPassType === 'MONTHLY' ? '30 Days' : '1 Day'})
+                      📅 {calculateExpectedEndDate(startDate, selectedPlan || selectedPassType)} ({getPackageDays(selectedPlan || selectedPassType)} Days)
                     </div>
                   </div>
                   <div>

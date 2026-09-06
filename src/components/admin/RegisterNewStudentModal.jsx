@@ -70,7 +70,8 @@ export const RegisterNewStudentModal = ({
     [plans]
   );
 
-  const getPlan = (planId) => activePlans.find(plan => plan.id === planId) || plans.find(plan => plan.id === planId);
+  const getPlan = (planId) => activePlans.find(plan => String(plan.id).toLowerCase() === String(planId || '').toLowerCase())
+    || plans.find(plan => String(plan.id).toLowerCase() === String(planId || '').toLowerCase());
   const getPlanName = (plan) => plan?.name || plan?.title || 'Access Package';
   const getPlanPrice = (plan) => {
     const price = Number(String(plan?.price ?? '').replace(/[^\d.]/g, ''));

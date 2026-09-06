@@ -46,7 +46,7 @@ export const WalkinStudentModal = ({
   // Helper to compute end date based on pass type (timezone-safe)
   function calculateInitialEndDate(startStr, passType) {
     if (!startStr) return '';
-    const plan = plans.find(item => String(item.id).toLowerCase() === String(passType).toLowerCase());
+    const plan = plans.find(item => String(item.id).toLowerCase() === String(passType || '').toLowerCase());
     return calculatePackageEndDate(startStr, plan || passType);
   }
 
