@@ -142,8 +142,9 @@ export const BookingPage = () => {
   );
   const selectedPlan = activePlans.find(plan => String(plan.id).toLowerCase() === String(selectedPassType).toLowerCase());
   const selectedSeatObj = seats.find(s => s.id === selectedSeatId);
-  const selectedPackageDays = getPackageDays(selectedPassType);
-  const selectedExpiryDate = calculateExpectedEndDate(startDate, selectedPassType);
+  const selectedPackageValue = selectedPlan || selectedPassType;
+  const selectedPackageDays = getPackageDays(selectedPackageValue);
+  const selectedExpiryDate = calculateExpectedEndDate(startDate, selectedPackageValue);
 
   useEffect(() => {
     const matchingPlan = activePlans.find(plan => String(plan.id).toLowerCase() === String(urlPlanId || '').toLowerCase());
