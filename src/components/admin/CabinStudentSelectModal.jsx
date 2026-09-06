@@ -5,6 +5,8 @@ import {
 } from 'lucide-react';
 import { useBooking } from '../../context/BookingContext';
 import { calculatePackageEndDate } from '../../utils/dateUtils';
+import { useNotification } from '../notifications/useNotification';
+import { getFriendlyErrorMessage } from '../../utils/notificationMessages';
 
 export const CabinStudentSelectModal = ({
   isOpen,
@@ -19,6 +21,7 @@ export const CabinStudentSelectModal = ({
   const bookingCtx = useBooking() || {};
   const users = (propUsers && propUsers.length > 0) ? propUsers : (bookingCtx.users || []);
   const { bookings = [], seats = [], lockers = [], updateBookingDetails, assignLocker } = bookingCtx;
+  const { success, error, warning, confirm } = useNotification();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -271,7 +274,7 @@ export const CabinStudentSelectModal = ({
       let targetNewEndDate = '';
       if (additionalDays === 'CUSTOM') {
         if (!customExtendEndDate) {
-          alert('Please select a valid new expiry date.');
+          warning('Please select a valid new expiry date.', { title: 'Invalid Expiry Date' });
           setIsProcessing(false);
           return;
         }
@@ -298,10 +301,11 @@ export const CabinStudentSelectModal = ({
       }
 
       setExtensionSuccessMsg(`✅ Reservation successfully extended until ${targetNewEndDate}!`);
+      success(`Reservation successfully extended until ${targetNewEndDate}.`, { title: 'Reservation Extended' });
       setExtensionMode(false);
       setTimeout(() => setExtensionSuccessMsg(''), 4000);
     } catch (err) {
-      alert('Failed to extend reservation: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to extend this reservation.'), { title: 'Extension Failed' });
     } finally {
       setIsProcessing(false);
     }
@@ -368,7 +372,7 @@ export const CabinStudentSelectModal = ({
       }
       onClose();
     } catch (err) {
-      alert('Failed to assign student to cabin: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to assign this student to the desk.'), { title: 'Assignment Failed' });
     } finally {
       setIsProcessing(false);
     }
@@ -376,13 +380,20 @@ export const CabinStudentSelectModal = ({
 
   // ── Release seat ──
   const handleRelease = async () => {
-    if (window.confirm(`Release Desk ${cabinSeat.seatNumber} and make it AVAILABLE?`)) {
+    const confirmed = await confirm({
+      title: 'Release Desk?',
+      message: `Release Desk ${cabinSeat.seatNumber} and make it AVAILABLE?`,
+      confirmText: 'Release Desk',
+      cancelText: 'Keep Desk',
+      destructive: true
+    });
+    if (confirmed) {
       setIsProcessing(true);
       try {
         if (onReleaseCabin) await onReleaseCabin(cabinSeat);
         onClose();
       } catch (err) {
-        alert('Failed to release cabin: ' + err.message);
+        error(getFriendlyErrorMessage(err, 'Unable to release this desk.'), { title: 'Release Failed' });
       } finally {
         setIsProcessing(false);
       }
@@ -600,7 +611,7 @@ export const CabinStudentSelectModal = ({
                       if (studentUser) {
                         onViewProfile(studentUser);
                       } else {
-                        alert('Could not find student profile. The occupant data may not be linked to a user record.');
+                        warning('The occupant data may not be linked to a student profile.', { title: 'Student Profile Not Found' });
                       }
                     }
                   }}
@@ -684,7 +695,7 @@ export const CabinStudentSelectModal = ({
                       if (studentUser) {
                         onViewProfile(studentUser);
                       } else {
-                        alert('Could not find student profile. The occupant data may not be linked to a user record.');
+                        warning('The occupant data may not be linked to a student profile.', { title: 'Student Profile Not Found' });
                       }
                     }
                   }}

@@ -4,12 +4,15 @@ import { useAuth } from '../context/AuthContext';
 import { Header } from '../components/layout/Header';
 import { Footer } from '../components/layout/Footer';
 import { Shield, Lock, Mail } from 'lucide-react';
+import { useNotification } from '../components/notifications/useNotification';
+import { getFriendlyErrorMessage, getFriendlyErrorTitle } from '../utils/notificationMessages';
 
 export const AdminLoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const { login, loading } = useAuth();
+  const { error: notifyError } = useNotification();
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
@@ -19,7 +22,9 @@ export const AdminLoginPage = () => {
       await login(email, password);
       navigate('/admin');
     } catch (err) {
-      setError(err.message || 'Invalid admin credentials');
+      const friendlyMessage = getFriendlyErrorMessage(err, 'Unable to sign in. Please check your credentials and try again.');
+      setError(friendlyMessage);
+      notifyError(friendlyMessage, { title: getFriendlyErrorTitle(err, 'Sign-in Failed') });
     }
   };
 

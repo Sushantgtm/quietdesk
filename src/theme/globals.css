@@ -222,3 +222,183 @@ input[type=number] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* Global notifications */
+.notification-container {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.75rem;
+  width: min(420px, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.notification-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 1rem 0.9rem 1rem 1rem;
+  border: 1px solid var(--border-subtle);
+  border-left: 4px solid currentColor;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-modal);
+  color: var(--primary);
+  pointer-events: auto;
+  animation: notification-enter 0.25s ease-out both;
+}
+
+.notification-toast-success { color: var(--status-available); }
+.notification-toast-error { color: var(--status-occupied); }
+.notification-toast-warning { color: var(--status-reserved); }
+.notification-toast-info { color: var(--primary); }
+
+.notification-toast-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.notification-toast-content strong {
+  display: block;
+  margin-bottom: 0.15rem;
+  color: var(--primary);
+  font-size: 0.95rem;
+}
+
+.notification-toast-content p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.notification-close {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.notification-close:hover {
+  background: var(--bg-container);
+  color: var(--primary);
+}
+
+.notification-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(21, 27, 46, 0.6);
+  backdrop-filter: blur(4px);
+  animation: notification-fade-in 0.2s ease-out both;
+}
+
+.notification-confirm-dialog {
+  position: relative;
+  width: min(100%, 480px);
+  padding: 1.75rem;
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-xl);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-modal);
+  animation: notification-dialog-enter 0.25s ease-out both;
+}
+
+.notification-confirm-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin-bottom: 1rem;
+  border-radius: var(--radius-full);
+  background: var(--status-reserved-bg);
+  color: var(--status-reserved);
+}
+
+.notification-confirm-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+}
+
+.notification-confirm-dialog h2 {
+  margin-bottom: 0.5rem;
+  font-size: 1.45rem;
+}
+
+.notification-confirm-dialog p {
+  white-space: pre-line;
+}
+
+.notification-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.notification-confirm-danger {
+  background: var(--status-occupied);
+  color: var(--text-inverse);
+}
+
+.notification-confirm-danger:hover {
+  background: #a61f1f;
+}
+
+@keyframes notification-enter {
+  from { opacity: 0; transform: translate3d(1rem, -0.25rem, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes notification-dialog-enter {
+  from { opacity: 0; transform: translateY(0.5rem) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes notification-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (max-width: 640px) {
+  .notification-container {
+    top: 0.75rem;
+    right: 0.75rem;
+    left: 0.75rem;
+    width: auto;
+    align-items: stretch;
+  }
+
+  .notification-confirm-actions {
+    flex-direction: column-reverse;
+  }
+
+  .notification-confirm-actions .btn {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notification-toast,
+  .notification-confirm-backdrop,
+  .notification-confirm-dialog {
+    animation: none;
+  }
+}

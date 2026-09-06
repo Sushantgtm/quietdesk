@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { X, Lock, Key, User, Phone, Mail, Calendar, Shield, AlertTriangle, CheckCircle2, UserPlus, Search, Sliders, RefreshCw } from 'lucide-react';
 import { useBooking } from '../../context/BookingContext';
+import { useNotification } from '../notifications/useNotification';
+import { getFriendlyErrorMessage } from '../../utils/notificationMessages';
 
 export const LockerManageModal = ({
   isOpen,
@@ -11,6 +13,7 @@ export const LockerManageModal = ({
   onUpdateStatus
 }) => {
   const { users, seats, lockers } = useBooking();
+  const { error, warning, success, confirm } = useNotification();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [selectedSeatNumber, setSelectedSeatNumber] = useState('');
@@ -45,14 +48,18 @@ export const LockerManageModal = ({
   const handleAssign = async (e) => {
     e.preventDefault();
     if (!selectedStudent) {
-      alert('Please select a student to assign this locker.');
+      warning('Please select a student to assign this locker.', { title: 'Student Required' });
       return;
     }
 
     if (studentExistingLocker) {
-      const confirmChange = window.confirm(
-        `Notice: ${selectedStudent.fullName || selectedStudent.name} is currently assigned ${studentExistingLocker.label || studentExistingLocker.lockerNumber}.\n\nUnder the 1-locker-per-student rule, assigning this locker will automatically release their previous locker first.\n\nDo you want to proceed?`
-      );
+      const confirmChange = await confirm({
+        title: 'Replace Existing Locker?',
+        message: `Notice: ${selectedStudent.fullName || selectedStudent.name} is currently assigned ${studentExistingLocker.label || studentExistingLocker.lockerNumber}.\n\nUnder the 1-locker-per-student rule, assigning this locker will automatically release their previous locker first.\n\nDo you want to proceed?`,
+        confirmText: 'Assign Locker',
+        cancelText: 'Keep Existing',
+        destructive: true
+      });
       if (!confirmChange) return;
     }
 
@@ -71,20 +78,27 @@ export const LockerManageModal = ({
       });
       onClose();
     } catch (err) {
-      alert('Failed to assign locker: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to assign this locker.'), { title: 'Locker Assignment Failed' });
     } finally {
       setIsProcessing(false);
     }
   };
 
   const handleRelease = async () => {
-    if (window.confirm(`Are you sure you want to release ${locker.label || locker.lockerNumber} and make it AVAILABLE?`)) {
+    const confirmed = await confirm({
+      title: 'Release Locker?',
+      message: `Are you sure you want to release ${locker.label || locker.lockerNumber} and make it AVAILABLE?`,
+      confirmText: 'Release Locker',
+      cancelText: 'Keep Locker',
+      destructive: true
+    });
+    if (confirmed) {
       setIsProcessing(true);
       try {
         await onReleaseLocker(locker.id);
         onClose();
       } catch (err) {
-        alert('Failed to release locker: ' + err.message);
+        error(getFriendlyErrorMessage(err, 'Unable to release this locker.'), { title: 'Locker Release Failed' });
       } finally {
         setIsProcessing(false);
       }
@@ -100,7 +114,7 @@ export const LockerManageModal = ({
       });
       onClose();
     } catch (err) {
-      alert('Failed to update locker status: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to update this locker status.'), { title: 'Locker Update Failed' });
     } finally {
       setIsProcessing(false);
     }

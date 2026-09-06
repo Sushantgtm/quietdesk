@@ -5,6 +5,8 @@ import {
 } from 'lucide-react';
 import { useBooking } from '../../context/BookingContext';
 import { calculatePackageEndDate } from '../../utils/dateUtils';
+import { useNotification } from '../notifications/useNotification';
+import { getFriendlyErrorMessage } from '../../utils/notificationMessages';
 
 export const ReservationConfirmModal = ({
   isOpen,
@@ -13,6 +15,7 @@ export const ReservationConfirmModal = ({
   onConfirmSuccess
 }) => {
   const { seats = [], lockers = [], plans = [], updateBookingDetails, changeSeatStatus, assignLocker, updateUser, approveBooking } = useBooking();
+  const { success, error } = useNotification();
 
   const [seatId, setSeatId] = useState('');
   const [passType, setPassType] = useState('DAILY');
@@ -144,12 +147,12 @@ export const ReservationConfirmModal = ({
           });
       }
 
-      alert(`✅ Reservation ${booking.bookingCode} APPROVED!\nDesk #${targetSeatNumber} is now RESERVED for ${booking.userName}.`);
+      success(`Desk #${targetSeatNumber} is now RESERVED for ${booking.userName}.`, { title: `Reservation ${booking.bookingCode} Approved` });
       if (onConfirmSuccess) onConfirmSuccess();
       onClose();
     } catch (err) {
       console.error('Error approving reservation:', err);
-      alert('Failed to approve reservation: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to approve this reservation.'), { title: 'Approval Failed' });
     } finally {
       setIsProcessing(false);
     }

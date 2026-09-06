@@ -19,13 +19,15 @@ import { StudyRoomFloorPlan } from '../components/admin/StudyRoomFloorPlan';
 import { CabinStudentSelectModal } from '../components/admin/CabinStudentSelectModal';
 import { LockerManageModal } from '../components/admin/LockerManageModal';
 import { StudentProfileModal } from '../components/admin/StudentProfileModal';
-import { ReservationConfirmModal } from '../components/admin/ReservationConfirmModal';
 import { exportToExcel } from '../utils/exportExcel';
 import { calculatePackageEndDate } from '../utils/dateUtils';
 import { deleteContactInquiry, subscribeContactInquiries, updateContactInquiryStatus } from '../services/firebase/contactService';
+import { useNotification } from '../components/notifications/useNotification';
+import { getFriendlyErrorMessage } from '../utils/notificationMessages';
 
 export const AdminPage = () => {
   const { isAuthenticated, logout, admin } = useAuth();
+  const { success, error, warning, info, confirm } = useNotification();
   const { 
     seats, lockers, bookings, users, plans, zones, amenities, faqs,
     changeSeatStatus, changeBookingStatus, changePaymentStatus, 
@@ -75,6 +77,7 @@ export const AdminPage = () => {
   const [selectedUserForProfile, setSelectedUserForProfile] = useState(null);
   const [showRegisterUserModal, setShowRegisterUserModal] = useState(false);
   const [showDeletedUsersModal, setShowDeletedUsersModal] = useState(false);
+  const [showDeactivatedUsers, setShowDeactivatedUsers] = useState(false);
   const [showEditUserModal, setShowEditUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [editUserForm, setEditUserForm] = useState({});
@@ -87,13 +90,22 @@ export const AdminPage = () => {
     fullName: '', email: '', phone: '', passType: 'DAILY', emergencyContact: '', notes: ''
   });
 
-  const [showReservationConfirmModal, setShowReservationConfirmModal] = useState(false);
-  const [selectedBookingForConfirmation, setSelectedBookingForConfirmation] = useState(null);
 
   const calculateExpectedAdminEndDate = (startStr, passType) => {
     if (!startStr) return '';
     const plan = plans.find(item => String(item.id).toLowerCase() === String(passType).toLowerCase());
     return calculatePackageEndDate(startStr, plan || passType);
+  };
+
+  const getPlanDisplayName = (record) => {
+    const planKey = record?.packageId || record?.passType;
+    const normalizePlanKey = value => String(value || '').toLowerCase().trim().replace(/^plan_/, '');
+    const normalizedPlanKey = normalizePlanKey(planKey);
+    const plan = plans.find(item => normalizePlanKey(item.id) === normalizedPlanKey);
+    if (plan?.name || plan?.title || plan?.planName) return plan.name || plan.title || plan.planName;
+    if (record?.packageName) return record.packageName;
+    const fallback = String(planKey || 'DAILY').replace(/^plan_/i, '').replace(/[_-]+/g, ' ').trim();
+    return fallback ? fallback.replace(/\b\w/g, character => character.toUpperCase()) : 'Daily';
   };
 
   const [showReservationModal, setShowReservationModal] = useState(false);
@@ -199,9 +211,10 @@ export const AdminPage = () => {
 
   const handleDeleteZoneClick = async (zoneId, zoneName) => {
     if (!zoneId) return;
-    if (window.confirm(`Are you sure you want to delete the study zone "${zoneName}"?`)) {
+    if (await confirm({ title: 'Delete Study Zone?', message: `Are you sure you want to delete the study zone "${zoneName}"?`, confirmText: 'Delete Zone', cancelText: 'Keep Zone', destructive: true })) {
       setShowZoneModal(false);
           await deleteZone(zoneId);
+      success(`Study zone "${zoneName}" was deleted.`, { title: 'Zone Deleted' });
     }
   };
 
@@ -280,10 +293,11 @@ export const AdminPage = () => {
   };
 
   const handleDeleteInquiry = async (inquiry) => {
-    if (!window.confirm(`Delete the inquiry from ${inquiry.name || 'this customer'}?`)) return;
+    if (!await confirm({ title: 'Delete Inquiry?', message: `Delete the inquiry from ${inquiry.name || 'this customer'}?`, confirmText: 'Delete Inquiry', cancelText: 'Keep Inquiry', destructive: true })) return;
     try {
       await deleteContactInquiry(inquiry.id);
       setSelectedInquiry(null);
+      success('The inquiry was deleted.', { title: 'Inquiry Deleted' });
     } catch (error) {
       console.error('Unable to delete inquiry:', error);
       setInquiryError('Unable to delete this inquiry right now.');
@@ -304,7 +318,7 @@ export const AdminPage = () => {
   };
 
   const handleResetAndStartFresh = async () => {
-    if (!window.confirm('⚠️ Are you sure you want to remove current student bookings and reset to a clean database? This will clear stale records and initialize pristine state.')) return;
+    if (!await confirm({ title: 'Reset Database?', message: 'Are you sure you want to remove current student bookings and reset to a clean database? This will clear stale records and initialize pristine state.', confirmText: 'Reset Database', cancelText: 'Cancel', destructive: true })) return;
     setIsSeeding(true);
     try {
       ['v1', 'v2', 'v3'].forEach(v => {
@@ -406,7 +420,7 @@ export const AdminPage = () => {
       setShowRegistrationReceiptModal(true);
     } catch (err) {
       console.error('Walkin registration error:', err);
-      alert('Error registering walk-in student: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to register the walk-in student.'), { title: 'Registration Failed' });
     }
   };
 
@@ -432,12 +446,12 @@ export const AdminPage = () => {
         }));
         setShowReservationModal(true);
       } else {
-        alert('User profile successfully created and saved to database!');
+        success('User profile successfully created and saved to the database.', { title: 'Student Created' });
       }
       setRegisterUserForm({ fullName: '', email: '', phone: '', passType: 'DAILY', emergencyContact: '', notes: '' });
     } catch (err) {
       console.error('Error registering user:', err);
-      alert('Failed to register user: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to register this user.'), { title: 'Registration Failed' });
     }
   };
 
@@ -450,15 +464,15 @@ export const AdminPage = () => {
       const memberEmail = (reservationForm.userEmail || '').trim();
 
       if (!memberName || memberName.toLowerCase() === 'scholar') {
-        alert('⚠️ Please enter a valid Member Name before creating a reservation or booking.');
+        warning('Please enter a valid member name before creating a reservation or booking.', { title: 'Name Required' });
         return;
       }
       if (!memberPhone && !memberEmail) {
-        alert('⚠️ Please provide at least a Phone Number or Email Address for the member.');
+        warning('Please provide at least a phone number or email address for the member.', { title: 'Contact Required' });
         return;
       }
       if (!reservationForm.seatId) {
-        alert('⚠️ Please choose an available station / desk.');
+        warning('Please choose an available station / desk.', { title: 'Desk Required' });
         return;
       }
 
@@ -499,7 +513,7 @@ export const AdminPage = () => {
       });
 
       if (dupBooking) {
-        alert(`⚠️ Scholar "${dupBooking.userName || reservationForm.userName}" already holds an active desk (Desk ${dupBooking.seatNumber}, valid until ${dupBooking.endDate || 'active'}). A student cannot hold multiple active desks simultaneously.`);
+        warning(`Scholar "${dupBooking.userName || reservationForm.userName}" already holds an active desk (Desk ${dupBooking.seatNumber}, valid until ${dupBooking.endDate || 'active'}). A student cannot hold multiple active desks simultaneously.`, { title: 'Active Desk Already Assigned' });
         return;
       }
 
@@ -532,10 +546,10 @@ export const AdminPage = () => {
         endDate: calculatePackageEndDate(new Date().toISOString().split('T')[0], 'DAILY'), totalAmount: 350,
         advanceAmount: 0, amountPaid: 0, pendingAmount: 350, paymentStatus: 'PAID', hasLocker: false
       });
-      alert(bookingStatus === 'CONFIRMED' ? '✅ Cabin successfully booked and occupied!' : '✅ Reservation successfully created!');
+      success(bookingStatus === 'CONFIRMED' ? 'Cabin successfully booked and occupied.' : 'Reservation successfully created.', { title: bookingStatus === 'CONFIRMED' ? 'Booking Confirmed' : 'Reservation Created' });
     } catch (err) {
       console.error('Error creating booking/reservation:', err);
-      alert('Error: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to create the booking or reservation.'), { title: 'Booking Failed' });
     }
   };
 
@@ -543,14 +557,14 @@ export const AdminPage = () => {
   const handleDeleteUser = async (user) => {
     if (!user) return;
     const name = user.fullName || user.name || user.id;
-    if (!window.confirm(`Deactivate / Discontinue student "${name}"?\n\nThis will:\n- Keep all historical records, profile, payments, and bookings intact\n- Release their current desk and locker to AVAILABLE\n- Mark student status as DISCONTINUED\n\nDo you want to proceed?`)) return;
+    if (!await confirm({ title: 'Deactivate Student?', message: `Deactivate / Discontinue student "${name}"?\n\nThis will:\n- Keep all historical records, profile, payments, and bookings intact\n- Release their current desk and locker to AVAILABLE\n- Mark student status as DISCONTINUED\n\nDo you want to proceed?`, confirmText: 'Deactivate Student', cancelText: 'Keep Student', destructive: true })) return;
 
     try {
       await deactivateStudent(user.id);
-      alert(`Student "${name}" has been deactivated. Historical records and financial ledger remain preserved.`);
+      success(`Student "${name}" has been deactivated. Historical records and financial ledger remain preserved.`, { title: 'Student Deactivated' });
     } catch (err) {
       console.error('Error deactivating student:', err);
-      alert('Failed to deactivate student: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to deactivate this student.'), { title: 'Deactivation Failed' });
     }
   };
 
@@ -562,21 +576,21 @@ export const AdminPage = () => {
         membershipStatus: 'INACTIVE',
         deletedAt: null
       });
-      alert(`✅ User "${user.fullName || user.name}" has been restored to the active database.`);
+      success(`User "${user.fullName || user.name}" has been restored to the active database.`, { title: 'Student Restored' });
     } catch (err) {
       console.error('Error restoring user:', err);
-      alert('Failed to restore user: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to restore this student.'), { title: 'Restore Failed' });
     }
   };
 
   const handlePermanentDeleteUser = async (user) => {
-    if (!window.confirm(`⚠️ PERMANENT DELETE: Are you sure you want to permanently erase "${user.fullName || user.name}" from Firestore? This CANNOT be undone.`)) return;
+    if (!await confirm({ title: 'Permanently Delete Student?', message: `Are you sure you want to permanently erase "${user.fullName || user.name}" from Firestore? This cannot be undone.`, confirmText: 'Delete Permanently', cancelText: 'Cancel', destructive: true })) return;
     try {
       await deleteUserFromFirestore(user.id);
-      alert(`✅ User permanently erased.`);
+      success('The user was permanently erased.', { title: 'Student Deleted' });
     } catch (err) {
       console.error('Error permanently erasing user:', err);
-      alert('Failed to erase user: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to permanently delete this student.'), { title: 'Deletion Failed' });
     }
   };
 
@@ -620,20 +634,20 @@ export const AdminPage = () => {
       }
       setShowEditBookingModal(false);
       setSelectedBookingForEdit(null);
-      alert('Booking details updated successfully!');
+      success('Booking details updated successfully.', { title: 'Booking Updated' });
     } catch (err) {
       console.error('Error updating booking:', err);
-      alert('Failed to update booking: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to update this booking.'), { title: 'Booking Update Failed' });
     }
   };
 
   const handleRejectBooking = async (booking) => {
-    if (!window.confirm(`Are you sure you want to reject reservation ${booking.bookingCode} for ${booking.userName}? Desk ${booking.seatNumber} will remain AVAILABLE.`)) return;
+    if (!await confirm({ title: 'Reject Reservation?', message: `Are you sure you want to reject reservation ${booking.bookingCode} for ${booking.userName}? Desk ${booking.seatNumber} will remain AVAILABLE.`, confirmText: 'Reject Reservation', cancelText: 'Keep Reservation', destructive: true })) return;
     try {
       await rejectBooking(booking.id);
-      alert(`Reservation ${booking.bookingCode} has been REJECTED. The desk remains Available.`);
+      success(`Reservation ${booking.bookingCode} has been rejected. The desk remains available.`, { title: 'Reservation Rejected' });
     } catch (err) {
-      alert(`Failed to reject: ${err.message}`);
+      error(getFriendlyErrorMessage(err, 'Unable to reject this reservation.'), { title: 'Rejection Failed' });
     }
   };
 
@@ -651,10 +665,10 @@ export const AdminPage = () => {
         pendingAmount: newPending,
         paymentStatus: newStatus
       });
-      alert(`Recorded partial payment of NPR ${addAmount}. New Paid: NPR ${newPaid}, Balance Pending: NPR ${newPending}`);
+      success(`Recorded partial payment of NPR ${addAmount}. New paid: NPR ${newPaid}, balance pending: NPR ${newPending}.`, { title: 'Payment Recorded' });
     } catch (err) {
       console.error('Error recording partial payment:', err);
-      alert('Failed to record partial payment: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to record this partial payment.'), { title: 'Payment Failed' });
     }
   };
   // Handler to open Record Payment Modal
@@ -706,10 +720,10 @@ export const AdminPage = () => {
 
       setShowRecordPaymentModal(false);
       setSelectedBookingForPayment(null);
-      alert(`✅ Successfully recorded payment of NPR ${addAmt.toLocaleString()} via ${paymentModalForm.paymentMethod}!\nRemaining Left Balance: ${newPending === 0 ? 'Nil (Fully Settled)' : 'NPR ' + newPending.toLocaleString()}`);
+      success(`Successfully recorded payment of NPR ${addAmt.toLocaleString()} via ${paymentModalForm.paymentMethod}. Remaining balance: ${newPending === 0 ? 'Nil (fully settled)' : 'NPR ' + newPending.toLocaleString()}.`, { title: 'Payment Recorded' });
     } catch (err) {
       console.error('Error recording payment:', err);
-      alert('Failed to record payment: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to record this payment.'), { title: 'Payment Failed' });
     }
   };
 
@@ -719,17 +733,17 @@ export const AdminPage = () => {
       ? `Complete booking ${bookingObj.bookingCode} for ${bookingObj.userName} and set Desk ${seatObj.seatNumber} back to AVAILABLE?`
       : `Set Desk ${seatObj.seatNumber} status to AVAILABLE?`;
 
-    if (window.confirm(confirmMsg)) {
+    if (await confirm({ title: 'Complete Booking?', message: confirmMsg, confirmText: 'Complete Booking', cancelText: 'Cancel', destructive: true })) {
       try {
         if (bookingObj) {
           await changeBookingStatus(bookingObj.id, seatObj.id, 'COMPLETED');
         } else {
           await changeSeatStatus(seatObj.id, 'AVAILABLE');
         }
-        alert(`✅ Desk ${seatObj.seatNumber} set to AVAILABLE and booking completed.`);
+        success(`Desk ${seatObj.seatNumber} is now available and the booking is completed.`, { title: 'Booking Completed' });
       } catch (err) {
         console.error('Error quick completing booking:', err);
-        alert('Failed to complete booking: ' + err.message);
+        error(getFriendlyErrorMessage(err, 'Unable to complete this booking.'), { title: 'Completion Failed' });
       }
     }
   };
@@ -777,29 +791,29 @@ export const AdminPage = () => {
 
       if (editingSeat) {
         await updateSeatDetails(editingSeat.id, payload);
-        alert(`✅ Station ${seatForm.seatNumber} details updated successfully!`);
+        success(`Station ${seatForm.seatNumber} details updated successfully.`, { title: 'Station Updated' });
       } else {
         await createSeat(payload);
-        alert(`✅ New station ${seatForm.seatNumber} added successfully!`);
+        success(`New station ${seatForm.seatNumber} added successfully.`, { title: 'Station Created' });
       }
       setShowSeatModal(false);
       setEditingSeat(null);
     } catch (err) {
       console.error('Error saving seat details:', err);
-      alert('Failed to save seat details: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to save station details.'), { title: 'Station Save Failed' });
     }
   };
 
   const handleDeleteSeatSubmit = async (seatId) => {
-    if (window.confirm('Are you sure you want to remove this study desk/station?')) {
+    if (await confirm({ title: 'Delete Study Station?', message: 'Are you sure you want to remove this study desk/station?', confirmText: 'Delete Station', cancelText: 'Keep Station', destructive: true })) {
       try {
         await deleteSeat(seatId);
         setShowSeatModal(false);
         setEditingSeat(null);
-        alert('Station removed successfully.');
+        success('Station removed successfully.', { title: 'Station Deleted' });
       } catch (err) {
         console.error('Error deleting seat:', err);
-        alert('Failed to delete seat: ' + err.message);
+        error(getFriendlyErrorMessage(err, 'Unable to delete this station.'), { title: 'Station Deletion Failed' });
       }
     }
   };
@@ -818,7 +832,7 @@ export const AdminPage = () => {
         hasLocker: singleStationForm.hasLocker,
         notes: singleStationForm.notes
       });
-      alert(`✅ Station ${singleStationForm.seatNumber} successfully created and published!`);
+      success(`Station ${singleStationForm.seatNumber} successfully created and published.`, { title: 'Station Created' });
       // Auto-increment code suggestion for fast sequential creation
       const numMatch = singleStationForm.seatNumber.match(/^([A-Za-z\-]+)(\d+)$/);
       if (numMatch) {
@@ -828,7 +842,7 @@ export const AdminPage = () => {
       }
     } catch (err) {
       console.error('Error creating single station:', err);
-      alert('Failed to create station: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to create this station.'), { title: 'Station Creation Failed' });
     }
   };
 
@@ -838,11 +852,11 @@ export const AdminPage = () => {
     const start = parseInt(bulkStationForm.startNum, 10);
     const end = parseInt(bulkStationForm.endNum, 10);
     if (isNaN(start) || isNaN(end) || start > end) {
-      alert('Please specify a valid start and end index.');
+      warning('Please specify a valid start and end index.', { title: 'Invalid Station Range' });
       return;
     }
     const totalToCreate = end - start + 1;
-    if (!window.confirm(`Generate ${totalToCreate} stations from ${bulkStationForm.prefix}${String(start).padStart(2, '0')} to ${bulkStationForm.prefix}${String(end).padStart(2, '0')}?`)) {
+    if (!await confirm({ title: 'Create Stations?', message: `Generate ${totalToCreate} stations from ${bulkStationForm.prefix}${String(start).padStart(2, '0')} to ${bulkStationForm.prefix}${String(end).padStart(2, '0')}?`, confirmText: 'Create Stations', cancelText: 'Cancel' })) {
       return;
     }
     try {
@@ -860,10 +874,10 @@ export const AdminPage = () => {
         });
         createdCount++;
       }
-      alert(`✅ Successfully batch-created ${createdCount} new study stations!`);
+      success(`Successfully batch-created ${createdCount} new study stations.`, { title: 'Stations Created' });
     } catch (err) {
       console.error('Error batch creating stations:', err);
-      alert('Failed during batch station creation: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to create the study stations.'), { title: 'Batch Creation Failed' });
     }
   };
 
@@ -886,30 +900,30 @@ export const AdminPage = () => {
 
       if (editingPackage) {
         await updatePlan(editingPackage.id, planData);
-        alert('Access package updated!');
+        success('Access package updated.', { title: 'Package Updated' });
       } else {
         await createPlan(planData);
-        alert('New access package created!');
+        success('New access package created.', { title: 'Package Created' });
       }
       setShowPackageModal(false);
       setEditingPackage(null);
       setPackageForm({ id: '', name: '', price: '', originalPrice: '', duration: '', lockerEligible: true, features: '', popular: false });
     } catch (err) {
       console.error('Error saving package:', err);
-      alert('Failed to save package: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to save this access package.'), { title: 'Package Save Failed' });
     }
   };
 
   const handleDeletePackageSubmit = async (packageId) => {
-    if (window.confirm('Are you sure you want to delete this access package?')) {
+    if (await confirm({ title: 'Delete Access Package?', message: 'Are you sure you want to delete this access package?', confirmText: 'Delete Package', cancelText: 'Keep Package', destructive: true })) {
       try {
         await deletePlan(packageId);
         setShowPackageModal(false);
         setEditingPackage(null);
-        alert('Access package deleted.');
+        success('Access package deleted.', { title: 'Package Deleted' });
       } catch (err) {
         console.error('Error deleting package:', err);
-        alert('Failed to delete package: ' + err.message);
+        error(getFriendlyErrorMessage(err, 'Unable to delete this access package.'), { title: 'Package Deletion Failed' });
       }
     }
   };
@@ -926,28 +940,28 @@ export const AdminPage = () => {
 
       if (editingAmenity) {
         await updateAmenity(editingAmenity.id, data);
-        alert('Amenity updated successfully!');
+        success('Amenity updated successfully.', { title: 'Amenity Updated' });
       } else {
         await createAmenity(data);
-        alert('New amenity added successfully!');
+        success('New amenity added successfully.', { title: 'Amenity Created' });
       }
       setShowAmenityModal(false);
       setEditingAmenity(null);
       setAmenityForm({ id: '', iconName: 'Armchair', title: '', desc: '' });
     } catch (err) {
       console.error('Error saving amenity:', err);
-      alert('Failed to save amenity: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to save this amenity.'), { title: 'Amenity Save Failed' });
     }
   };
 
   const handleDeleteAmenitySubmit = async (id) => {
-    if (window.confirm('Are you sure you want to delete this amenity card?')) {
+    if (await confirm({ title: 'Delete Amenity?', message: 'Are you sure you want to delete this amenity card?', confirmText: 'Delete Amenity', cancelText: 'Keep Amenity', destructive: true })) {
       try {
         await deleteAmenity(id);
-        alert('Amenity card deleted.');
+        success('Amenity card deleted.', { title: 'Amenity Deleted' });
       } catch (err) {
         console.error('Error deleting amenity:', err);
-        alert('Failed to delete amenity: ' + err.message);
+        error(getFriendlyErrorMessage(err, 'Unable to delete this amenity.'), { title: 'Amenity Deletion Failed' });
       }
     }
   };
@@ -964,28 +978,28 @@ export const AdminPage = () => {
 
       if (editingFaq) {
         await updateFaq(editingFaq.id, data);
-        alert('FAQ updated successfully!');
+        success('FAQ updated successfully.', { title: 'FAQ Updated' });
       } else {
         await createFaq(data);
-        alert('New FAQ added successfully!');
+        success('New FAQ added successfully.', { title: 'FAQ Created' });
       }
       setShowFaqModal(false);
       setEditingFaq(null);
       setFaqForm({ id: '', question: '', answer: '', order: 1 });
     } catch (err) {
       console.error('Error saving FAQ:', err);
-      alert('Failed to save FAQ: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to save this FAQ.'), { title: 'FAQ Save Failed' });
     }
   };
 
   const handleDeleteFaqSubmit = async (id) => {
-    if (window.confirm('Are you sure you want to delete this FAQ?')) {
+    if (await confirm({ title: 'Delete FAQ?', message: 'Are you sure you want to delete this FAQ?', confirmText: 'Delete FAQ', cancelText: 'Keep FAQ', destructive: true })) {
       try {
         await deleteFaq(id);
-        alert('FAQ deleted.');
+        success('FAQ deleted.', { title: 'FAQ Deleted' });
       } catch (err) {
         console.error('Error deleting FAQ:', err);
-        alert('Failed to delete FAQ: ' + err.message);
+        error(getFriendlyErrorMessage(err, 'Unable to delete this FAQ.'), { title: 'FAQ Deletion Failed' });
       }
     }
   };
@@ -1156,7 +1170,7 @@ export const AdminPage = () => {
 
   const handleExportPaymentsExcel = () => {
     if (!filteredFinanceBookings.length) {
-      alert('No payment records to export in the selected filter.');
+      warning('No payment records to export in the selected filter.', { title: 'Nothing to Export' });
       return;
     }
     const rows = filteredFinanceBookings.map(b => {
@@ -1167,7 +1181,7 @@ export const AdminPage = () => {
         'Student ID': b.userCode || b.userId || 'N/A',
         'Student Name': b.userName || '',
         'Contact': b.userPhone || '',
-        'Package': b.passType || 'DAILY',
+        'Package': getPlanDisplayName(b),
         'Amount': total,
         'Amount Paid': paid,
         'Balance Due': due,
@@ -1180,12 +1194,23 @@ export const AdminPage = () => {
     exportToExcel(rows, `QuietDesk_Payments_${financeDateFilter}_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  // --- Unified User Registry (Includes Admin registered users + Website booked students, excluding deleted files) ---
+  const isDeactivatedUser = (user) => user?.deleted === true ||
+    ['DELETED', 'DISCONTINUED'].includes(String(user?.status || '').toUpperCase()) ||
+    ['DELETED', 'DISCONTINUED'].includes(String(user?.membershipStatus || '').toUpperCase());
+
+  // --- Unified User Registry (active users only; deactivated records stay in the archive) ---
   const allUnifiedUsers = useMemo(() => {
     const userMap = new Map();
-    // 1. Add all users from the users collection that are NOT deleted
+    const deactivatedKeys = new Set();
+    (users || []).filter(isDeactivatedUser).forEach(user => {
+      if (user.id) deactivatedKeys.add(`id:${user.id}`);
+      if (user.phone) deactivatedKeys.add(`phone:${String(user.phone).replace(/\D/g, '')}`);
+      if (user.email) deactivatedKeys.add(`email:${String(user.email).trim().toLowerCase()}`);
+    });
+
+    // 1. Add all users from the users collection that are active
     (users || []).forEach(u => {
-      if (!u || !u.id || u.deleted === true || u.status === 'DELETED' || u.membershipStatus === 'DELETED') return;
+      if (!u || !u.id || isDeactivatedUser(u)) return;
       userMap.set(u.id, { ...u, source: 'REGISTERED' });
     });
 
@@ -1198,6 +1223,9 @@ export const AdminPage = () => {
       const bUserId = b.userId;
       const phoneClean = (b.userPhone || '').replace(/\D/g, '');
       const emailClean = (b.userEmail || '').toLowerCase().trim();
+      if (deactivatedKeys.has(`id:${bUserId}`) ||
+        (phoneClean && deactivatedKeys.has(`phone:${phoneClean}`)) ||
+        (emailClean && deactivatedKeys.has(`email:${emailClean}`))) return;
 
       let foundKey = null;
       for (const [key, val] of userMap.entries()) {
@@ -1215,7 +1243,9 @@ export const AdminPage = () => {
           ...existing,
           assignedSeat: b.seatNumber ? `Desk ${b.seatNumber}` : existing.assignedSeat,
           seatNumber: b.seatNumber || existing.seatNumber,
-          passType: b.passType || existing.passType
+          passType: b.passType || existing.passType,
+          packageId: b.packageId || existing.packageId,
+          packageName: b.packageName || existing.packageName
         });
       } else {
         const autoId = bUserId || `usr_bk_${b.id}`;
@@ -1227,6 +1257,8 @@ export const AdminPage = () => {
           email: b.userEmail || '',
           phone: b.userPhone || '',
           passType: b.passType || 'DAILY',
+          packageId: b.packageId || b.passType || 'DAILY',
+          packageName: b.packageName || '',
           assignedSeat: b.seatNumber ? `Desk ${b.seatNumber}` : '',
           seatNumber: b.seatNumber || '',
           joinedDate: b.startDate || b.createdAt || new Date().toISOString(),
@@ -1240,10 +1272,11 @@ export const AdminPage = () => {
     return Array.from(userMap.values());
   }, [users, bookings]);
 
-  // --- Deleted Users Archive (Recycle Bin) ---
+  // --- Deactivated Users Archive ---
   const deletedUsersList = useMemo(() => {
-    return (users || []).filter(u => u && (u.deleted === true || u.status === 'DELETED' || u.membershipStatus === 'DELETED'));
+    return (users || []).filter(isDeactivatedUser);
   }, [users]);
+  const usersToDisplay = showDeactivatedUsers ? deletedUsersList : allUnifiedUsers;
 
   // --- Dashboard Computed: Unpaid / Partial Payments ---
   const unpaidBookings = bookings.filter(b => b.status !== 'CANCELLED' && b.paymentStatus !== 'PAID');
@@ -1849,7 +1882,7 @@ export const AdminPage = () => {
                             </div>
                             <div>
                               <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0F172A', lineHeight: 1.2 }}>{b.userName || 'Walk-in'}</div>
-                              <div style={{ fontSize: '0.65rem', color: '#94A3B8' }}>{b.passType} · Desk {b.seatNumber}</div>
+                              <div style={{ fontSize: '0.65rem', color: '#94A3B8' }}>{getPlanDisplayName(b)} · Desk {b.seatNumber}</div>
                             </div>
                           </div>
                           <span style={{ fontSize: '0.7rem', fontWeight: 800, color: textColor, backgroundColor: bgBadge, padding: '0.15rem 0.5rem', borderRadius: '10px', whiteSpace: 'nowrap' }}>
@@ -1971,7 +2004,7 @@ export const AdminPage = () => {
                                 )}
                               </td>
                               <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center' }}>
-                                <span style={{ backgroundColor: passStyle.bg, color: passStyle.color, padding: '0.15rem 0.45rem', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700 }}>{b.passType}</span>
+                                <span style={{ backgroundColor: passStyle.bg, color: passStyle.color, padding: '0.15rem 0.45rem', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700 }}>{getPlanDisplayName(b)}</span>
                               </td>
                               <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center', fontSize: '0.75rem', color: '#475569', whiteSpace: 'nowrap' }}>
                                 {b.endDate || '—'}
@@ -2126,6 +2159,25 @@ export const AdminPage = () => {
               </div>
 
               <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeactivatedUsers(current => !current);
+                    setUserStatusFilter('ALL');
+                  }}
+                  style={{
+                    padding: '0.55rem 0.85rem',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: showDeactivatedUsers ? '#FEF3C7' : '#FFFFFF',
+                    color: showDeactivatedUsers ? '#92400E' : '#334155',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {showDeactivatedUsers ? 'Show Active Students' : `Show Deactivated (${deletedUsersList.length})`}
+                </button>
                 <select
                   value={userStatusFilter}
                   onChange={(e) => setUserStatusFilter(e.target.value)}
@@ -2143,7 +2195,7 @@ export const AdminPage = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Total Registered Users</div>
-                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#0F172A', marginTop: '0.2rem' }}>{allUnifiedUsers.length}</div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#0F172A', marginTop: '0.2rem' }}>{usersToDisplay.length}</div>
               </div>
               <div style={{ backgroundColor: '#FFFFFF', padding: '1.25rem', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Active Pass Holders</div>
@@ -2181,7 +2233,7 @@ export const AdminPage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {allUnifiedUsers
+                  {usersToDisplay
                     .filter(u => {
                       const todayStr = new Date().toISOString().split('T')[0];
                       const hasActiveBooking = (bookings || []).some(b =>
@@ -2189,7 +2241,9 @@ export const AdminPage = () => {
                         !['CANCELLED', 'COMPLETED'].includes(b.status) &&
                         (!b.endDate || b.endDate >= todayStr)
                       );
-                      const effectiveStatus = hasActiveBooking ? 'ACTIVE' : (u.membershipStatus || u.status || 'INACTIVE');
+                      const effectiveStatus = isDeactivatedUser(u)
+                        ? 'DEACTIVATED'
+                        : (hasActiveBooking ? 'ACTIVE' : (u.membershipStatus || u.status || 'INACTIVE'));
 
                       const q = searchQuery.toLowerCase();
                       const matchesSearch = !q || (u.fullName && u.fullName.toLowerCase().includes(q)) ||
@@ -2206,7 +2260,9 @@ export const AdminPage = () => {
                         !['CANCELLED', 'COMPLETED'].includes(b.status) &&
                         (!b.endDate || b.endDate >= todayStr)
                       );
-                      const displayStatus = activeBookingForUser ? 'ACTIVE' : (user.membershipStatus || user.status || 'INACTIVE');
+                      const displayStatus = isDeactivatedUser(user)
+                        ? 'DEACTIVATED'
+                        : (activeBookingForUser ? 'ACTIVE' : (user.membershipStatus || user.status || 'INACTIVE'));
 
                       return (
                       <tr key={user.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
@@ -2234,7 +2290,7 @@ export const AdminPage = () => {
                             backgroundColor: user.passType === 'MONTHLY' ? '#EDE9FE' : user.passType === 'WEEKLY' ? '#DBEAFE' : '#F3F4F6',
                             color: user.passType === 'MONTHLY' ? '#6D28D9' : user.passType === 'WEEKLY' ? '#1D4ED8' : '#374151'
                           }}>
-                            {user.passType}
+                            {getPlanDisplayName(user)}
                           </span>
                         </td>
                         <td style={{ padding: '0.85rem 1.25rem' }}>
@@ -2272,7 +2328,26 @@ export const AdminPage = () => {
                             >
                               <Eye size={13} /> View Profile
                             </button>
-                            {activeBookingForUser ? (
+                            {showDeactivatedUsers ? (
+                              <button
+                                onClick={() => handleRestoreUser(user)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem',
+                                  padding: '0.35rem 0.65rem',
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  backgroundColor: '#059669',
+                                  color: '#FFFFFF',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <RefreshCw size={13} /> Restore
+                              </button>
+                            ) : activeBookingForUser ? (
                               <button
                                 onClick={() => {
                                   const targetSeat = seats.find(s => s.seatNumber === activeBookingForUser.seatNumber || s.id === activeBookingForUser.seatId) || { seatNumber: activeBookingForUser.seatNumber, zone: activeBookingForUser.zone || 'Zone A' };
@@ -2320,25 +2395,27 @@ export const AdminPage = () => {
                                 <Plus size={13} /> Assign Desk
                               </button>
                             )}
-                            <button
-                              onClick={() => handleDeleteUser(user)}
-                              title="Deactivate / Discontinue Student (preserves history, releases cabin & locker)"
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.25rem',
-                                padding: '0.35rem 0.6rem',
-                                borderRadius: '6px',
-                                border: '1px solid #FCA5A5',
-                                backgroundColor: '#FFF5F5',
-                                color: '#DC2626',
-                                fontSize: '0.75rem',
-                                fontWeight: 700,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              <UserMinus size={13} />
-                            </button>
+                            {!showDeactivatedUsers && (
+                              <button
+                                onClick={() => handleDeleteUser(user)}
+                                title="Deactivate / Discontinue Student (preserves history, releases cabin & locker)"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem',
+                                  padding: '0.35rem 0.6rem',
+                                  borderRadius: '6px',
+                                  border: '1px solid #FCA5A5',
+                                  backgroundColor: '#FFF5F5',
+                                  color: '#DC2626',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <UserMinus size={13} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -2465,11 +2542,11 @@ export const AdminPage = () => {
                   onClick={async () => {
                     try {
                       const freed = await reconcileSeats();
-                      alert(freed > 0
+                      success(freed > 0
                         ? "Reconciled! " + freed + " orphaned desk(s) freed to AVAILABLE."
-                        : "All desks are consistent. No orphaned seats found.");
+                        : "All desks are consistent. No orphaned seats found.", { title: 'Seat Reconciliation Complete' });
                     } catch (err) {
-                      alert("Reconcile error: " + err.message);
+                      error(getFriendlyErrorMessage(err, 'Unable to reconcile seat statuses.'), { title: 'Reconciliation Failed' });
                     }
                   }}
                   style={{
@@ -2811,7 +2888,7 @@ export const AdminPage = () => {
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 700, color: '#0F172A' }}>
                                     <User size={14} color="#2563EB" />
                                     {activeBooking.userName}
-                                    <span style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 500 }}>({activeBooking.passType || 'DAILY'})</span>
+                                    <span style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 500 }}>({getPlanDisplayName(activeBooking)})</span>
                                   </div>
                                 ) : (
                                   <span style={{ color: '#CBD5E1', fontStyle: 'italic' }}>Unassigned</span>
@@ -2956,12 +3033,12 @@ export const AdminPage = () => {
                   <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                     <button
                       onClick={async () => {
-                        if (window.confirm("Delete all legacy zones from Firebase and register the 5 exact study zones matching the floor layout?")) {
+                        if (await confirm({ title: 'Reset Study Zones?', message: 'Delete all legacy zones from Firebase and register the 5 exact study zones matching the floor layout?', confirmText: 'Reset Zones', cancelText: 'Cancel', destructive: true })) {
                           const res = await resetAndSeedZones();
                           if (res && res.success) {
-                            alert("✅ Successfully deleted existing zone documents from Firebase and initialized the 5 official floor layout study zones!");
+                            success('Existing zone documents were deleted and the official study zones were initialized.', { title: 'Zones Reset' });
                           } else {
-                            alert("Failed to reset zones: " + (res?.error || 'Unknown error'));
+                            error('Unable to reset the study zones. Please try again.', { title: 'Zone Reset Failed' });
                           }
                         }
                       }}
@@ -3469,7 +3546,7 @@ export const AdminPage = () => {
                         {booking.userName}
                       </div>
                       <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: '0.75rem' }}>
-                        Desk <strong style={{ color: '#0F172A' }}>{booking.seatNumber}</strong> - {booking.passType} Pass
+                        Desk <strong style={{ color: '#0F172A' }}>{booking.seatNumber}</strong> - {getPlanDisplayName(booking)}
                         {booking.hasLocker ? (
                           <span style={{ marginLeft: '0.5rem', backgroundColor: '#FEF3C7', color: '#92400E', padding: '0.15rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700 }}>
                             Locker (+NPR {booking.lockerFee || 0})
@@ -3485,8 +3562,9 @@ export const AdminPage = () => {
                       <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
                         <button
                           onClick={() => {
-                            setSelectedBookingForConfirmation(booking);
-                            setShowReservationConfirmModal(true);
+                            setPreselectedBookingForRegister(booking);
+                            setPreselectedSeatForRegister(null);
+                            setShowRegisterStudentModal(true);
                           }}
                           style={{
                             flex: 1,
@@ -3504,7 +3582,7 @@ export const AdminPage = () => {
                             gap: '0.35rem'
                           }}
                         >
-                          <CheckCircle2 size={15} /> Approve & Reserve Desk
+                          <CheckCircle2 size={15} /> Approve & Register Student
                         </button>
                         <button
                           onClick={() => handleRejectBooking(booking)}
@@ -3582,7 +3660,7 @@ export const AdminPage = () => {
                           {/* Package */}
                           <td style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>
                             <span style={{ fontSize: '0.72rem', fontWeight: 700, backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
-                              {b.passType || 'DAILY'}
+                              {getPlanDisplayName(b)}
                             </span>
                           </td>
 
@@ -4088,7 +4166,7 @@ export const AdminPage = () => {
                           </td>
                           <td style={{ padding: '0.75rem 0.9rem', whiteSpace: 'nowrap' }}>
                             <span style={{ fontSize: '0.72rem', fontWeight: 700, backgroundColor: '#EFF6FF', color: '#1D4ED8', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>
-                              {b.passType}
+                              {getPlanDisplayName(b)}
                             </span>
                           </td>
                           <td style={{ padding: '0.75rem 0.9rem', fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap' }}>
@@ -4551,20 +4629,20 @@ export const AdminPage = () => {
         }}
         onChangeSeat={async (bookingId, newSeatObj, oldSeatId, studentId) => {
           await changeStudentSeat(bookingId, newSeatObj, oldSeatId, studentId);
-          alert(`Desk successfully changed to Desk ${newSeatObj.seatNumber}! Previous desk has been released.`);
+          success(`Desk successfully changed to Desk ${newSeatObj.seatNumber}. Previous desk has been released.`, { title: 'Desk Changed' });
         }}
         onRenewBooking={async (bookingId, passType, customEndDate) => {
           const newEnd = await renewStudentBooking(bookingId, passType, customEndDate);
-          alert(`Booking successfully renewed! New expiry date: ${newEnd}`);
+          success(`Booking successfully renewed. New expiry date: ${newEnd}.`, { title: 'Booking Renewed' });
         }}
         onSettleDue={async (bookingId, paymentMethod) => {
           await settleBookingDue(bookingId, paymentMethod);
-          alert('Outstanding dues successfully settled in full!');
+          success('Outstanding dues successfully settled in full.', { title: 'Balance Settled' });
         }}
         onDeactivateUser={async (u) => {
           await deactivateStudent(u.id);
           setSelectedUserForProfile(null);
-          alert(`Student "${u.fullName || u.name}" has been deactivated/discontinued. Their desk and locker have been released.`);
+          success(`Student "${u.fullName || u.name}" has been deactivated. Their desk and locker have been released.`, { title: 'Student Deactivated' });
         }}
         onPrintReceipt={(receiptData) => {
           setRegistrationReceiptData(receiptData);
@@ -5563,7 +5641,7 @@ export const AdminPage = () => {
             });
 
             if (dupBooking) {
-              alert(`⚠️ Scholar "${displayName}" already holds an active desk (Desk ${dupBooking.seatNumber}, valid until ${dupBooking.endDate || 'active'}). A student cannot hold multiple active desks simultaneously.`);
+              warning(`Scholar "${displayName}" already holds an active desk (Desk ${dupBooking.seatNumber}, valid until ${dupBooking.endDate || 'active'}). A student cannot hold multiple active desks simultaneously.`, { title: 'Active Desk Already Assigned' });
               return;
             }
 
@@ -5635,10 +5713,10 @@ export const AdminPage = () => {
               membershipStatus: 'ACTIVE'
             });
 
-            alert(`✅ Desk ${seat.seatNumber} assigned to ${displayName}!\nBooking Code: ${bookingCode}\nTotal: NPR ${Number(totalAmount).toLocaleString()}${Number(pendingAmount) > 0 ? `\n⚠ Due: NPR ${Number(pendingAmount).toLocaleString()}` : ' (Fully Paid)'}`);
+            success(`Desk ${seat.seatNumber} assigned to ${displayName}. Booking Code: ${bookingCode}. Total: NPR ${Number(totalAmount).toLocaleString()}${Number(pendingAmount) > 0 ? `; due: NPR ${Number(pendingAmount).toLocaleString()}` : ' (fully paid)'}`, { title: 'Desk Assigned' });
           } catch (err) {
             console.error('Error assigning student:', err);
-            alert('Failed to assign student: ' + err.message);
+            error(getFriendlyErrorMessage(err, 'Unable to assign this student.'), { title: 'Assignment Failed' });
           }
         }}
         onReleaseCabin={async (seat) => {
@@ -5680,10 +5758,10 @@ export const AdminPage = () => {
             } else {
               await changeSeatStatus(seat.id, 'AVAILABLE');
             }
-            alert(`✅ Desk #${seat.seatNumber} is now AVAILABLE and occupant marked INACTIVE.`);
+            success(`Desk #${seat.seatNumber} is now available and the occupant was marked inactive.`, { title: 'Desk Released' });
           } catch (err) {
             console.error('Error releasing cabin:', err);
-            alert('Failed to release cabin: ' + err.message);
+            error(getFriendlyErrorMessage(err, 'Unable to release this desk.'), { title: 'Desk Release Failed' });
           }
         }}
         onOpenWalkinForCabin={(seat) => {
@@ -5719,39 +5797,30 @@ export const AdminPage = () => {
         onAssignLocker={async (lockerId, assignmentData) => {
           try {
             await assignLocker(lockerId, assignmentData);
-            alert(`✅ ${selectedLockerForModal?.label || selectedLockerForModal?.lockerNumber} successfully assigned to ${assignmentData.userName}!`);
+            success(`${selectedLockerForModal?.label || selectedLockerForModal?.lockerNumber} was assigned to ${assignmentData.userName}.`, { title: 'Locker Assigned' });
           } catch (err) {
             console.error('Error assigning locker:', err);
-            alert('Failed to assign locker: ' + err.message);
+            error(getFriendlyErrorMessage(err, 'Unable to assign this locker.'), { title: 'Locker Assignment Failed' });
           }
         }}
         onReleaseLocker={async (lockerId) => {
           try {
             await releaseLocker(lockerId);
-            alert(`✅ ${selectedLockerForModal?.label || selectedLockerForModal?.lockerNumber} is now set back to AVAILABLE.`);
+            success(`${selectedLockerForModal?.label || selectedLockerForModal?.lockerNumber} is now available.`, { title: 'Locker Released' });
           } catch (err) {
             console.error('Error releasing locker:', err);
-            alert('Failed to release locker: ' + err.message);
+            error(getFriendlyErrorMessage(err, 'Unable to release this locker.'), { title: 'Locker Release Failed' });
           }
         }}
         onUpdateStatus={async (lockerId, status, details) => {
           try {
             await updateLockerStatus(lockerId, status, details);
-            alert(`✅ ${selectedLockerForModal?.label || selectedLockerForModal?.lockerNumber} status updated to ${status}.`);
+            success(`${selectedLockerForModal?.label || selectedLockerForModal?.lockerNumber} status updated to ${status}.`, { title: 'Locker Updated' });
           } catch (err) {
             console.error('Error updating locker status:', err);
-            alert('Failed to update status: ' + err.message);
+            error(getFriendlyErrorMessage(err, 'Unable to update this locker status.'), { title: 'Locker Update Failed' });
           }
         }}
-      />
-
-      <ReservationConfirmModal
-        isOpen={showReservationConfirmModal}
-        onClose={() => {
-          setShowReservationConfirmModal(false);
-          setSelectedBookingForConfirmation(null);
-        }}
-        booking={selectedBookingForConfirmation}
       />
 
       {/* ==================== CMS MODAL: ADD/EDIT AMENITY ==================== */}

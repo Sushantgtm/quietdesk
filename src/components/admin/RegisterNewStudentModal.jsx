@@ -7,6 +7,8 @@ import {
 import { useBooking } from '../../context/BookingContext';
 import { sendReservationConfirmationEmail } from '../../services/emailService';
 import { calculatePackageEndDate } from '../../utils/dateUtils';
+import { useNotification } from '../notifications/useNotification';
+import { getFriendlyErrorMessage } from '../../utils/notificationMessages';
 
 export const RegisterNewStudentModal = ({
   isOpen,
@@ -15,6 +17,7 @@ export const RegisterNewStudentModal = ({
   preselectedSeat = null,
   onSuccess
 }) => {
+  const { success, error } = useNotification();
   const {
     seats = [],
     lockers = [],
@@ -529,15 +532,13 @@ export const RegisterNewStudentModal = ({
         ? '\n📧 Confirmation email sent to student.'
         : `\nℹ️ Email status: ${emailResult.reason}`;
 
-      alert(
-        `✅ Student registered successfully. Seat ${selectedSeatObj.seatNumber} assigned until ${formData.endDate}.${emailNote}`
-      );
+      success(`Student registered successfully. Seat ${selectedSeatObj.seatNumber} assigned until ${formData.endDate}.${emailNote}`, { title: 'Student Registered' });
 
       if (onSuccess) onSuccess();
       onClose();
     } catch (err) {
       console.error('Registration failed:', err);
-      alert('Registration Failed: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to register this student.'), { title: 'Registration Failed' });
     } finally {
       setIsSubmitting(false);
     }

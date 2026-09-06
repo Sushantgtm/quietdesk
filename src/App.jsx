@@ -11,6 +11,7 @@ import { TermsOfServicePage } from './pages/TermsOfServicePage';
 import { FaqPage } from './pages/FaqPage';
 import { ContactPage } from './pages/ContactPage';
 import { WhatsAppButton } from './components/WhatsAppButton';
+import { NotificationProvider } from './components/notifications/NotificationProvider';
 
 // Automatically purge stale or corrupted local caches containing legacy mojibake characters
 try {
@@ -29,23 +30,25 @@ try {
 
 export function App() {
   return (
-    <AuthProvider>
-      <BookingProvider>
-        <Router>
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/book" element={<BookingPage />} />
-            <Route path="/admin" element={<AdminPage />} />
-            <Route path="/admin/login" element={<AdminLoginPage />} />
-            <Route path="/privacy" element={<PrivacyPolicyPage />} />
-            <Route path="/terms" element={<TermsOfServicePage />} />
-            <Route path="/faq" element={<FaqPage />} />
-            <Route path="/contact" element={<ContactPage />} />
-          </Routes>
-          <WhatsAppButton />
-        </Router>
-      </BookingProvider>
-    </AuthProvider>
+    <NotificationProvider>
+      <AuthProvider>
+        <BookingProvider>
+          <Router>
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/book" element={<BookingPage />} />
+              <Route path="/admin" element={<AdminPage />} />
+              <Route path="/admin/login" element={<AdminLoginPage />} />
+              <Route path="/privacy" element={<PrivacyPolicyPage />} />
+              <Route path="/terms" element={<TermsOfServicePage />} />
+              <Route path="/faq" element={<FaqPage />} />
+              <Route path="/contact" element={<ContactPage />} />
+            </Routes>
+            <WhatsAppButton />
+          </Router>
+        </BookingProvider>
+      </AuthProvider>
+    </NotificationProvider>
   );
 }
 

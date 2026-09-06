@@ -5,8 +5,7 @@ import * as XLSX from 'xlsx';
  */
 export const exportToExcel = (data, filename = 'QuietDesk_Payments.xlsx') => {
   if (!data || !data.length) {
-    alert('No payment records to export.');
-    return;
+    return false;
   }
 
   try {
@@ -32,10 +31,12 @@ export const exportToExcel = (data, filename = 'QuietDesk_Payments.xlsx') => {
 
     // 4. Download file as true .xlsx binary
     XLSX.writeFile(workbook, cleanFilename);
+    return true;
   } catch (err) {
     console.error('Failed to export Excel via XLSX:', err);
     // Fallback to CSV if anything fails
     exportToCsvFallback(data, filename);
+    return true;
   }
 };
 

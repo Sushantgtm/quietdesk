@@ -1,11 +1,13 @@
 import React from 'react';
 import { X, Printer, CheckCircle, Copy, MapPin, Phone, Mail, Calendar, Clock, Lock, DollarSign, FileText } from 'lucide-react';
+import { useNotification } from '../notifications/useNotification';
 
 export const RegistrationReceiptModal = ({
   isOpen,
   onClose,
   receiptData
 }) => {
+  const { success, error } = useNotification();
   if (!isOpen || !receiptData) return null;
 
   const handlePrint = () => {
@@ -35,8 +37,9 @@ Date: ${receiptData.timestamp}
 =====================================================
     `.trim();
 
-    navigator.clipboard.writeText(text);
-    alert('✓ Receipt summary copied to clipboard!');
+    navigator.clipboard.writeText(text)
+      .then(() => success('Receipt summary copied to clipboard.', { title: 'Receipt Copied' }))
+      .catch(() => error('Unable to copy the receipt summary. Please try again.', { title: 'Copy Failed' }));
   };
 
   return (

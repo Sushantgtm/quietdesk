@@ -3,13 +3,16 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { Header } from '../components/layout/Header';
 import { Footer } from '../components/layout/Footer';
 import { useBooking } from '../context/BookingContext';
+import { useNotification } from '../components/notifications/useNotification';
 import { CheckCircle2, User, Mail, Phone, Calendar, ArrowRight, ArrowLeft, ShieldCheck, Ticket, Sparkles, Lock, Clock, Camera } from 'lucide-react';
 import { calculatePackageEndDate, getPackageDays } from '../utils/dateUtils';
+import { getFriendlyErrorMessage, getFriendlyErrorTitle } from '../utils/notificationMessages';
 
 export const BookingPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { seats, plans, createBooking } = useBooking();
+  const { success, error, warning } = useNotification();
 
   const urlSeatId = searchParams.get('seat');
   const urlPlanId = searchParams.get('plan');
@@ -179,12 +182,12 @@ export const BookingPage = () => {
   const handleNextStep = (e) => {
     e.preventDefault();
     if (step === 1 && (!selectedPlan || !selectedSeatObj || selectedSeatObj.status !== 'AVAILABLE')) {
-      alert('Please select an active package and an available desk to proceed.');
+      warning('Please select an active package and an available desk to proceed.', { title: 'Seat Unavailable' });
       return;
     }
     if (step === 2) {
       if (startDate < todayLocalDate) {
-        alert('Reservation date cannot be in the past. Please select today or a future date.');
+        warning('Reservation date cannot be in the past. Please select today or a future date.', { title: 'Invalid Date' });
         return;
       }
       if (startDate === todayLocalDate) {
@@ -193,7 +196,7 @@ export const BookingPage = () => {
         const currentNow = new Date();
         const currentMins = currentNow.getHours() * 60 + currentNow.getMinutes();
         if (selectedMins < currentMins) {
-          alert(`Expected arrival time cannot be in the past for today. Please select a time slot from ${availableTimeSlots[0]} onwards.`);
+          warning(`Expected arrival time cannot be in the past for today. Please select a time slot from ${availableTimeSlots[0]} onwards.`, { title: 'Invalid Arrival Time' });
           return;
         }
       }
@@ -232,8 +235,14 @@ export const BookingPage = () => {
       });
       setConfirmedBooking(booking);
       setStep(4);
+      const seatLabel = selectedSeatObj.seatNumber || selectedSeatObj.id;
+      if (String(booking?.status || 'PENDING').toUpperCase() === 'CONFIRMED') {
+        success(`Your seat ${seatLabel} has been successfully booked.`, { title: 'Booking Confirmed' });
+      } else {
+        success(`Your reservation for seat ${seatLabel} has been submitted. Waiting for admin confirmation.`, { title: 'Reservation Submitted' });
+      }
     } catch (err) {
-      alert('Error submitting reservation request: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to submit your reservation request. Please try again.'), { title: getFriendlyErrorTitle(err, 'Booking Failed') });
     } finally {
       setSubmitting(false);
     }

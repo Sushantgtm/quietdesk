@@ -7,6 +7,8 @@ import {
   Trash2, UserMinus, RefreshCw, Printer, AlertTriangle, Car, Sparkles
 } from 'lucide-react';
 import { calculateRenewalEndDate, calculateDaysRemaining, calculatePackageEndDate } from '../../utils/dateUtils';
+import { useNotification } from '../notifications/useNotification';
+import { getFriendlyErrorMessage } from '../../utils/notificationMessages';
 
 const TABS = ['profile', 'status', 'financials', 'history'];
 const TAB_LABELS = {
@@ -54,6 +56,7 @@ export const StudentProfileModal = ({
   const [isRenewingPackage, setIsRenewingPackage] = useState(false);
   const [selectedRenewalPackage, setSelectedRenewalPackage] = useState('MONTHLY');
   const [isProcessingAction, setIsProcessingAction] = useState(false);
+  const { success, error, warning, info, confirm } = useNotification();
 
   // Filter bookings for this student
   const userBookings = useMemo(() => {
@@ -179,16 +182,21 @@ export const StudentProfileModal = ({
   // Handler: Change Cabin
   const handleConfirmChangeCabin = async () => {
     if (!selectedNewSeatId) {
-      alert('Please select an available desk / cabin from the dropdown.');
+      warning('Please select an available desk / cabin from the dropdown.', { title: 'Desk Required' });
       return;
     }
     const newSeatObj = seats.find(s => s.id === selectedNewSeatId);
     if (!newSeatObj) {
-      alert('Selected desk not found.');
+      error('The selected desk could not be found. Please refresh and try again.', { title: 'Desk Not Found' });
       return;
     }
 
-    if (!window.confirm(`Confirm cabin change for ${displayName}?\n\n- Old Desk: ${activeBooking?.seatNumber || 'Current'}\n- New Desk: Desk ${newSeatObj.seatNumber} (${newSeatObj.zone || 'Quiet Zone'})\n\nPrevious desk will be released to AVAILABLE once assigned.`)) {
+    if (!await confirm({
+      title: 'Change Student Desk?',
+      message: `Confirm cabin change for ${displayName}?\n\n- Old Desk: ${activeBooking?.seatNumber || 'Current'}\n- New Desk: Desk ${newSeatObj.seatNumber} (${newSeatObj.zone || 'Quiet Zone'})\n\nPrevious desk will be released to AVAILABLE once assigned.`,
+      confirmText: 'Change Desk',
+      cancelText: 'Keep Desk'
+    })) {
       return;
     }
 
@@ -200,7 +208,7 @@ export const StudentProfileModal = ({
       setIsChangingCabin(false);
       setSelectedNewSeatId('');
     } catch (err) {
-      alert('Error changing cabin: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to change this student desk.'), { title: 'Desk Change Failed' });
     } finally {
       setIsProcessingAction(false);
     }
@@ -215,8 +223,9 @@ export const StudentProfileModal = ({
         await onRenewBooking(activeBooking.id, selectedRenewalPackage, renewalExpiryPreview);
       }
       setIsRenewingPackage(false);
+      success('The student package has been renewed.', { title: 'Package Renewed' });
     } catch (err) {
-      alert('Error renewing pass: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to renew this pass.'), { title: 'Renewal Failed' });
     } finally {
       setIsProcessingAction(false);
     }
@@ -226,11 +235,16 @@ export const StudentProfileModal = ({
   const handleSettleDue = async (bookingObj) => {
     const dueAmount = Math.max(0, Number(bookingObj.pendingAmount) || 0);
     if (dueAmount <= 0) {
-      alert('This booking is already paid in full.');
+      info('This booking is already paid in full.', { title: 'No Outstanding Balance' });
       return;
     }
 
-    if (!window.confirm(`Clear and settle outstanding balance of NPR ${dueAmount.toLocaleString()} for Booking #${bookingObj.bookingCode}?\n\nThis will mark the booking as PAID (settled in full).`)) {
+    if (!await confirm({
+      title: 'Settle Outstanding Balance?',
+      message: `Clear and settle outstanding balance of NPR ${dueAmount.toLocaleString()} for Booking #${bookingObj.bookingCode}?\n\nThis will mark the booking as PAID (settled in full).`,
+      confirmText: 'Settle Balance',
+      cancelText: 'Cancel Payment'
+    })) {
       return;
     }
 
@@ -240,7 +254,7 @@ export const StudentProfileModal = ({
         await onSettleDue(bookingObj.id, 'CASH');
       }
     } catch (err) {
-      alert('Error settling due: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to settle this outstanding balance.'), { title: 'Payment Failed' });
     } finally {
       setIsProcessingAction(false);
     }
@@ -248,7 +262,13 @@ export const StudentProfileModal = ({
 
   // Handler: Deactivate / Discontinue Student
   const handleDeactivate = async () => {
-    if (!window.confirm(`Are you sure you want to DEACTIVATE / DISCONTINUE "${displayName}"?\n\nThis will:\n- Keep all historical records, profile, payments, and bookings intact\n- Release their current desk (${activeBooking?.seatNumber || 'None'}) to AVAILABLE\n- Release their locker to AVAILABLE\n- Mark student status as DISCONTINUED\n\nDo you want to proceed?`)) {
+    if (!await confirm({
+      title: 'Deactivate Student?',
+      message: `Are you sure you want to DEACTIVATE / DISCONTINUE "${displayName}"?\n\nThis will:\n- Keep all historical records, profile, payments, and bookings intact\n- Release their current desk (${activeBooking?.seatNumber || 'None'}) to AVAILABLE\n- Release their locker to AVAILABLE\n- Mark student status as DISCONTINUED\n\nDo you want to proceed?`,
+      confirmText: 'Deactivate Student',
+      cancelText: 'Keep Student',
+      destructive: true
+    })) {
       return;
     }
 
@@ -259,7 +279,7 @@ export const StudentProfileModal = ({
       }
       onClose();
     } catch (err) {
-      alert('Error deactivating student: ' + err.message);
+      error(getFriendlyErrorMessage(err, 'Unable to deactivate this student.'), { title: 'Deactivation Failed' });
     } finally {
       setIsProcessingAction(false);
     }
