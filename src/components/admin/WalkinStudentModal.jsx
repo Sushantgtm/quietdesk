@@ -30,6 +30,7 @@ export const WalkinStudentModal = ({
     seatNumber: '',
     hasLocker: false,
     lockerNumber: '',
+    lockerAmount: '',
     shift: 'MORNING', // MORNING, AFTERNOON, EVENING, FULL_DAY, CUSTOM
     arrivalTime: '06:00 AM - 12:00 PM',
     customArrivalTime: '',
@@ -81,7 +82,10 @@ export const WalkinStudentModal = ({
   };
 
   const basePrice = getBasePackagePrice(formData.passType, formData.seatId);
-  const lockerFee = getLockerFee(formData.passType, formData.hasLocker);
+  const defaultLockerFee = getLockerFee(formData.passType, formData.hasLocker);
+  const lockerFee = formData.hasLocker
+    ? (formData.lockerAmount === '' ? defaultLockerFee : Math.max(0, Number(formData.lockerAmount) || 0))
+    : 0;
   const totalAmount = basePrice + lockerFee;
   
   const parsedAmountPaid = Math.max(0, Number(formData.amountPaid) || 0);
@@ -132,6 +136,7 @@ export const WalkinStudentModal = ({
       ...prev,
       hasLocker,
       lockerNumber: hasLocker ? (prev.lockerNumber || defaultLockerNum) : '',
+      lockerAmount: hasLocker ? (prev.lockerAmount || String(newLockerFee)) : '',
       amountPaid: String(newTotal)
     }));
   };
@@ -174,7 +179,6 @@ export const WalkinStudentModal = ({
 
     setIsSubmitting(true);
     try {
-      const studentCode = `QD-STU-${Math.floor(1000 + Math.random() * 9000)}`;
       const bookingCode = `QD-WALK-${Math.floor(1000 + Math.random() * 9000)}`;
 
       const finalArrivalTime = formData.shift === 'CUSTOM'
@@ -203,6 +207,7 @@ export const WalkinStudentModal = ({
         seatNumber: selectedSeatObj ? selectedSeatObj.seatNumber : '',
         hasLocker: formData.hasLocker,
         lockerNumber: formData.hasLocker ? formData.lockerNumber : '',
+        lockerAmount: formData.hasLocker ? lockerFee : 0,
         basePrice,
         lockerFee,
         totalAmount,
@@ -233,6 +238,7 @@ export const WalkinStudentModal = ({
         endDate: formData.endDate,
         hasLocker: formData.hasLocker,
         lockerNumber: formData.hasLocker ? formData.lockerNumber : '',
+        lockerAmount: formData.hasLocker ? lockerFee : 0,
         basePrice,
         lockerFee,
         totalAmount,
@@ -702,6 +708,16 @@ export const WalkinStudentModal = ({
                         }}
                       />
                     )}
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1E40AF' }}>
+                      Custom Amount (NPR)
+                      <input
+                        type="number"
+                        min="0"
+                        value={formData.lockerAmount}
+                        onChange={e => setFormData({ ...formData, lockerAmount: e.target.value })}
+                        style={{ marginLeft: '0.4rem', width: '100px', padding: '0.3rem 0.45rem', border: '1px solid #93C5FD', borderRadius: '6px' }}
+                      />
+                    </label>
                   </div>
                 )}
               </div>

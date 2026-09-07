@@ -115,7 +115,7 @@ export const updateLockerStatusInFirestore = async (lockerId, newStatus, details
   }
 };
 
-export const assignLockerInFirestore = async (lockerId, { userId, userName, userPhone, userEmail, seatNumber, passType, pinCode, notes, startDate, endDate }) => {
+export const assignLockerInFirestore = async (lockerId, { userId, userName, userPhone, userEmail, seatNumber, passType, pinCode, notes, startDate, endDate, lockerFee }) => {
   const generatedPin = pinCode || `${Math.floor(1000 + Math.random() * 9000)}`;
   const updatedData = {
     status: 'ASSIGNED',
@@ -125,6 +125,7 @@ export const assignLockerInFirestore = async (lockerId, { userId, userName, user
     assignedToUserEmail: userEmail || '',
     assignedSeatNumber: seatNumber || '',
     passType: passType || 'MONTHLY',
+    lockerFee: Number(lockerFee) >= 0 ? Number(lockerFee) : 0,
     pinCode: generatedPin,
     notes: notes || '',
     startDate: startDate || new Date().toISOString().split('T')[0],

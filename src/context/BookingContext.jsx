@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { subscribeSeatAvailability, updateSeatStatusInFirestore, updateSeatDetailsInFirestore, createSeatInFirestore, deleteSeatInFirestore, reconcileSeatAvailabilityInFirestore } from '../services/firebase/seatService';
 import { subscribeBookings, createBooking as createBookingService, updateBookingStatus, confirmBooking as confirmBookingService, updateBookingPaymentStatus, updateBookingDetails as updateBookingDetailsService, approveBooking as approveBookingService, rejectBooking as rejectBookingService, createAdminBooking as createAdminBookingService, changeStudentSeatInFirestore, settleBookingDueInFirestore, renewStudentBookingInFirestore } from '../services/firebase/bookingService';
 import { subscribePlans, createPlan as createPlanService, updatePlan as updatePlanService, deletePlan as deletePlanService } from '../services/firebase/pricingService';
@@ -27,6 +27,7 @@ export const BookingProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [loadingBookings, setLoadingBookings] = useState(true);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const reconciledLockerBookings = useRef(new Set());
 
   // Subscribe to all real-time Firestore collections
   useEffect(() => {
@@ -81,6 +82,39 @@ export const BookingProvider = ({ children }) => {
       if (typeof unsubZones === 'function') unsubZones();
     };
   }, []);
+
+  // Repair legacy approvals where the booking was saved before its locker claim completed.
+  useEffect(() => {
+    if (!bookings.length || !lockers.length) return;
+
+    bookings.forEach(booking => {
+      if (!booking.userId || !booking.lockerNumber || ['CANCELLED', 'COMPLETED', 'REJECTED'].includes(booking.status)) return;
+      const locker = lockers.find(item =>
+        item.lockerNumber === booking.lockerNumber || item.id === booking.lockerId
+      );
+      if (!locker || locker.status === 'ASSIGNED' || reconciledLockerBookings.current.has(`${booking.id}:${locker.id}`)) return;
+
+      const reconciliationKey = `${booking.id}:${locker.id}`;
+      reconciledLockerBookings.current.add(reconciliationKey);
+      assignLockerInFirestore(locker.id, {
+        userId: booking.userId,
+        userName: booking.userName,
+        userPhone: booking.userPhone,
+        userEmail: booking.userEmail,
+        seatNumber: booking.seatNumber,
+        passType: booking.passType,
+        lockerFee: booking.lockerFee,
+        startDate: booking.startDate,
+        endDate: booking.endDate,
+        notes: `Reconciled from booking ${booking.bookingCode || booking.id}`
+      }).then(result => {
+        if (!result?.success) reconciledLockerBookings.current.delete(reconciliationKey);
+        else setLockers(current => current.map(item => item.id === locker.id
+          ? { ...item, status: 'ASSIGNED', assignedToUserId: booking.userId, assignedToUserName: booking.userName, assignedToUserPhone: booking.userPhone || '', assignedToUserEmail: booking.userEmail || '', assignedSeatNumber: booking.seatNumber || '', passType: booking.passType, lockerFee: booking.lockerFee || 0 }
+          : item));
+      }).catch(() => reconciledLockerBookings.current.delete(reconciliationKey));
+    });
+  }, [bookings, lockers]);
 
   const selectSeat = (seat) => {
     setSelectedSeat(seat);

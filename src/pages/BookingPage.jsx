@@ -848,9 +848,9 @@ export const BookingPage = () => {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
                   <div>
-                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>Reference Code</div>
+                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>Student Reference</div>
                     <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--accent)', fontFamily: 'var(--font-headline)' }}>
-                      {confirmedBooking.bookingCode}
+                      {confirmedBooking.userCode || 'Assigned after approval'}
                     </div>
                   </div>
                   <div>
@@ -865,7 +865,7 @@ export const BookingPage = () => {
                   </div>
                   <div>
                     <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>Pass Type</div>
-                    <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>{confirmedBooking.passType}</div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>{confirmedBooking.packageName || selectedPlan?.name || selectedPlan?.title || confirmedBooking.passType}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>Arrival Time</div>

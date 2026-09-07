@@ -49,6 +49,7 @@ export const RegisterNewStudentModal = ({
     seatNumber: '',
     passType: 'daily',
     customPrice: '',
+    lockerAmount: '',
     startDate: today,
     endDate: calculatePackageEndDate(today, 'DAILY'),
     hasLocker: false,
@@ -76,6 +77,15 @@ export const RegisterNewStudentModal = ({
   const getPlan = (planId) => activePlans.find(plan => String(plan.id).toLowerCase() === String(planId || '').toLowerCase())
     || plans.find(plan => String(plan.id).toLowerCase() === String(planId || '').toLowerCase());
   const getPlanName = (plan) => plan?.name || plan?.title || 'Access Package';
+  const getBookingPlanName = (booking) => {
+    const plan = getPlan(booking?.packageId || booking?.passType);
+    if (plan) return getPlanName(plan);
+    if (booking?.packageName && !/^PLAN_/i.test(booking.packageName)) return booking.packageName;
+    return String(booking?.packageId || booking?.passType || 'Access Package')
+      .replace(/^PLAN_/i, '')
+      .replace(/[_-]+/g, ' ')
+      .trim();
+  };
   const getPlanPrice = (plan) => {
     const price = Number(String(plan?.price ?? '').replace(/[^\d.]/g, ''));
     return Number.isFinite(price) && price >= 0 ? price : 0;
@@ -90,7 +100,7 @@ export const RegisterNewStudentModal = ({
   };
 
   // Pricing helper
-  const calculatePricing = (passType, seatId, hasLocker, customPrice = '') => {
+  const calculatePricing = (passType, seatId, hasLocker, customPrice = '', lockerAmount = '') => {
     const plan = getPlan(passType);
     let basePrice = getPlanPrice(plan);
     const currentSeat = seats.find(s => s.id === seatId);
@@ -108,6 +118,9 @@ export const RegisterNewStudentModal = ({
       else if (pt === 'MONTHLY') lockerFee = 1000;
       else lockerFee = 200;
     }
+    if (hasLocker && lockerAmount !== '' && Number.isFinite(Number(lockerAmount)) && Number(lockerAmount) >= 0) {
+      lockerFee = Number(lockerAmount);
+    }
 
     const parsedCustomPrice = customPrice === '' ? basePrice : Number(customPrice);
     const finalBasePrice = Number.isFinite(parsedCustomPrice) && parsedCustomPrice >= 0 ? parsedCustomPrice : basePrice;
@@ -119,7 +132,8 @@ export const RegisterNewStudentModal = ({
     formData.passType,
     formData.seatId,
     formData.hasLocker,
-    formData.customPrice
+    formData.customPrice,
+    formData.lockerAmount
   );
 
   // Synchronize initial state on open
@@ -142,6 +156,7 @@ export const RegisterNewStudentModal = ({
           seatNumber: preselectedSeat.seatNumber,
           passType: activePlans[0]?.id || 'daily',
           customPrice: String(getPlanPrice(activePlans[0])),
+          lockerAmount: '',
           startDate: today,
           endDate: calculateEndDate(today, initialPlanId),
           hasLocker: false,
@@ -170,6 +185,7 @@ export const RegisterNewStudentModal = ({
           seatNumber: firstAvailSeat?.seatNumber || '',
           passType: activePlans[0]?.id || 'daily',
           customPrice: String(getPlanPrice(activePlans[0])),
+          lockerAmount: '',
           startDate: today,
           endDate: calculateEndDate(today, initialPlanId),
           hasLocker: false,
@@ -192,10 +208,10 @@ export const RegisterNewStudentModal = ({
   const populateFromBooking = (b) => {
     setSelectedPendingId(b.id);
     const bookingStart = b.startDate || today;
-    const expectedEnd = calculateEndDate(bookingStart, b.passType || 'DAILY');
-    const calculatedEnd = !b.endDate || b.endDate === bookingStart ? expectedEnd : b.endDate;
     const bookingPlanId = b.packageId || b.passType || activePlans[0]?.id || 'daily';
-    const pPrice = calculatePricing(bookingPlanId, b.seatId, !!b.hasLocker, b.customPrice ?? '');
+    const expectedEnd = calculateEndDate(bookingStart, bookingPlanId);
+    const calculatedEnd = !b.endDate || b.endDate === bookingStart ? expectedEnd : b.endDate;
+    const pPrice = calculatePricing(bookingPlanId, b.seatId, !!b.hasLocker, b.customPrice ?? '', b.lockerFee ?? '');
 
     const firstAvailLocker = lockers.find(l => l.status === 'AVAILABLE');
 
@@ -208,6 +224,7 @@ export const RegisterNewStudentModal = ({
       seatNumber: b.seatNumber || '',
       passType: b.packageId || b.passType || activePlans[0]?.id || 'daily',
       customPrice: b.customPrice !== undefined ? String(b.customPrice) : String(b.packagePrice || pPrice.defaultPrice),
+      lockerAmount: b.lockerFee !== undefined ? String(b.lockerFee) : (b.hasLocker ? String(pPrice.lockerFee) : ''),
       startDate: b.startDate || today,
       endDate: calculatedEnd,
       hasLocker: !!b.hasLocker,
@@ -241,6 +258,7 @@ export const RegisterNewStudentModal = ({
         seatNumber: firstAvail?.seatNumber || '',
         passType: activePlans[0]?.id || 'daily',
         customPrice: String(getPlanPrice(activePlans[0])),
+        lockerAmount: '',
         startDate: today,
         endDate: calculateEndDate(today, initialPlanId),
         hasLocker: false,
@@ -259,7 +277,7 @@ export const RegisterNewStudentModal = ({
   const handlePassTypeChange = (newPassType) => {
     const newEnd = calculateEndDate(formData.startDate, newPassType);
     const defaultPrice = getPlanPrice(getPlan(newPassType));
-    const pPrice = calculatePricing(newPassType, formData.seatId, formData.hasLocker, String(defaultPrice));
+    const pPrice = calculatePricing(newPassType, formData.seatId, formData.hasLocker, String(defaultPrice), formData.lockerAmount);
     setFormData(prev => ({
       ...prev,
       passType: newPassType,
@@ -272,9 +290,14 @@ export const RegisterNewStudentModal = ({
 
   const handleCustomPriceChange = (value) => {
     setFormData(prev => ({ ...prev, customPrice: value }));
-    const pPrice = calculatePricing(formData.passType, formData.seatId, formData.hasLocker, value);
+    const pPrice = calculatePricing(formData.passType, formData.seatId, formData.hasLocker, value, formData.lockerAmount);
     setFormData(prev => ({ ...prev, amountPaid: String(pPrice.totalAmount) }));
     if (errors.customPrice) setErrors(prev => ({ ...prev, customPrice: null }));
+  };
+
+  const handleLockerAmountChange = (value) => {
+    setFormData(prev => ({ ...prev, lockerAmount: value }));
+    if (errors.lockerAmount) setErrors(prev => ({ ...prev, lockerAmount: null }));
   };
 
   // Handle Start Date change
@@ -312,6 +335,9 @@ export const RegisterNewStudentModal = ({
     }
     if (formData.hasLocker && !formData.lockerNumber) {
       errs.lockerNumber = 'Please allocate a locker number.';
+    }
+    if (formData.hasLocker && (formData.lockerAmount === '' || isNaN(Number(formData.lockerAmount)) || Number(formData.lockerAmount) < 0)) {
+      errs.lockerAmount = 'Enter a valid locker amount.';
     }
     if (formData.parkingNeeded && !formData.vehicleNumber.trim()) {
       errs.vehicleNumber = 'Please provide vehicle / bike number.';
@@ -406,6 +432,7 @@ export const RegisterNewStudentModal = ({
         seatNumber: selectedSeatObj.seatNumber,
         hasLocker: formData.hasLocker,
         lockerNumber: formData.hasLocker ? formData.lockerNumber : '',
+        lockerFee,
         status: 'ACTIVE',
         membershipStatus: 'ACTIVE',
         updatedAt: new Date().toISOString()
@@ -447,13 +474,13 @@ export const RegisterNewStudentModal = ({
           hasLocker: formData.hasLocker,
           lockerId: matchingLocker?.id || null,
           lockerNumber: formData.hasLocker ? formData.lockerNumber : '',
+          lockerFee,
           parkingNeeded: formData.parkingNeeded,
           vehicleNumber: formData.parkingNeeded ? formData.vehicleNumber.trim() : '',
           referralSource: formData.referralSource === 'Other' ? formData.referralOther.trim() : formData.referralSource,
           emergencyContact: formData.emergencyContact.trim(),
           emergencyRelation: formData.emergencyRelation.trim(),
           basePrice,
-          lockerFee,
           totalAmount,
           amountPaid: parsedPaid,
           pendingAmount: pendingDue,
@@ -482,13 +509,13 @@ export const RegisterNewStudentModal = ({
           hasLocker: formData.hasLocker,
           lockerId: matchingLocker?.id || null,
           lockerNumber: formData.hasLocker ? formData.lockerNumber : '',
+          lockerFee,
           parkingNeeded: formData.parkingNeeded,
           vehicleNumber: formData.parkingNeeded ? formData.vehicleNumber.trim() : '',
           referralSource: formData.referralSource === 'Other' ? formData.referralOther.trim() : formData.referralSource,
           emergencyContact: formData.emergencyContact.trim(),
           emergencyRelation: formData.emergencyRelation.trim(),
           basePrice,
-          lockerFee,
           totalAmount,
           amountPaid: parsedPaid,
           pendingAmount: pendingDue,
@@ -512,6 +539,7 @@ export const RegisterNewStudentModal = ({
           userEmail: studentRecord.email,
           seatNumber: selectedSeatObj.seatNumber,
           passType: formData.passType,
+          lockerFee,
           startDate: formData.startDate,
           endDate: formData.endDate,
           notes: `Registered student desk ${selectedSeatObj.seatNumber}`
@@ -700,7 +728,7 @@ export const RegisterNewStudentModal = ({
               <option value="">-- Manual Registration (New Student / Walk-in) --</option>
               {pendingReservations.map(p => (
                 <option key={p.id} value={p.id}>
-                  {p.bookingCode} — {p.userName} (Desk {p.seatNumber} • {p.passType} Pass)
+                  {p.userCode || 'Student reference pending'} — {p.userName} (Desk {p.seatNumber} • {getBookingPlanName(p)}{p.bookingCode ? ` • Booking ${p.bookingCode}` : ''})
                 </option>
               ))}
             </select>
@@ -883,6 +911,7 @@ export const RegisterNewStudentModal = ({
                         ...prev,
                         hasLocker: hasL,
                         lockerNumber: hasL ? (prev.lockerNumber || firstAvail?.lockerNumber || '') : '',
+                        lockerAmount: hasL ? (prev.lockerAmount || String(calculatePricing(formData.passType, formData.seatId, true, formData.customPrice).lockerFee)) : '',
                         amountPaid: String(pPrice.totalAmount)
                       }));
                     }}
@@ -904,6 +933,15 @@ export const RegisterNewStudentModal = ({
                       ))}
                     </select>
                     {errors.lockerNumber && <div style={errStyle}>{errors.lockerNumber}</div>}
+                    <label style={{ ...labelStyle, display: 'block', marginTop: '0.55rem' }}>Custom Locker Amount (NPR)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.lockerAmount}
+                      onChange={e => handleLockerAmountChange(e.target.value)}
+                      style={inputStyle(!!errors.lockerAmount)}
+                    />
+                    {errors.lockerAmount && <div style={errStyle}>{errors.lockerAmount}</div>}
                   </>
                 )}
               </div>

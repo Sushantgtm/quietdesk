@@ -391,7 +391,8 @@ export const AdminPage = () => {
             userPhone: student.phone || '',
             userEmail: student.email || '',
             seatNumber: studentData.seatNumber || '',
-            passType: studentData.passType
+            passType: studentData.passType,
+            lockerFee: studentData.lockerFee
           });
         }
       }
@@ -429,7 +430,6 @@ export const AdminPage = () => {
     try {
       const newUser = await createUser({
         ...registerUserForm,
-        userCode: `QD-USR-${Math.floor(1000 + Math.random() * 9000)}`,
         membershipStatus: 'ACTIVE',
         joinedDate: new Date().toISOString()
       });
@@ -1272,7 +1272,7 @@ export const AdminPage = () => {
         const autoId = bUserId || `usr_bk_${b.id}`;
         userMap.set(autoId, {
           id: autoId,
-          userCode: b.userCode || `QD-STU-${Math.floor(1000 + Math.random() * 9000)}`,
+          userCode: b.userCode || 'Unregistered',
           fullName: b.userName,
           name: b.userName,
           email: b.userEmail || '',
@@ -2789,7 +2789,7 @@ export const AdminPage = () => {
                                       (cleanEmail && usr.email && String(usr.email).trim().toLowerCase() === cleanEmail)
                                     ) || {
                                       id: activeBooking?.userId || `usr_${seat.id}`,
-                                      userCode: activeBooking?.userCode || `QD-STU-${seat.seatNumber}`,
+                                      userCode: activeBooking?.userCode || 'Unregistered',
                                       fullName: activeBooking?.userName || 'Assigned Scholar',
                                       name: activeBooking?.userName || 'Assigned Scholar',
                                       phone: activeBooking?.userPhone || '',
@@ -2942,7 +2942,7 @@ export const AdminPage = () => {
                                             (cleanEmail && usr.email && String(usr.email).trim().toLowerCase() === cleanEmail)
                                           ) || {
                                             id: activeBooking?.userId || `usr_${seat.id}`,
-                                            userCode: activeBooking?.userCode || `QD-STU-${seat.seatNumber}`,
+                                            userCode: activeBooking?.userCode || 'Unregistered',
                                             fullName: activeBooking?.userName || 'Assigned Scholar',
                                             name: activeBooking?.userName || 'Assigned Scholar',
                                             phone: activeBooking?.userPhone || '',

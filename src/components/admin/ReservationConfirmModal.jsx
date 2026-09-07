@@ -25,6 +25,7 @@ export const ReservationConfirmModal = ({
   const [arrivalTime, setArrivalTime] = useState('06:00 AM');
   const [hasLocker, setHasLocker] = useState(false);
   const [lockerNumber, setLockerNumber] = useState('');
+  const [lockerAmount, setLockerAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [amountPaid, setAmountPaid] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -49,6 +50,7 @@ export const ReservationConfirmModal = ({
       setArrivalTime(booking.arrivalTime || booking.bookingTime || '06:00 AM');
       setHasLocker(!!booking.hasLocker);
       setLockerNumber(booking.lockerNumber || '');
+      setLockerAmount(booking.lockerFee !== undefined ? String(booking.lockerFee) : '');
       setPaymentMethod(booking.paymentMethod || 'CASH');
       const total = Number(booking.totalAmount) || 500;
       setAmountPaid(booking.paymentStatus === 'PAID' ? String(total) : String(booking.amountPaid || total));
@@ -68,7 +70,10 @@ export const ReservationConfirmModal = ({
   const selectedPlan = activePlans.find(plan => plan.id === String(passType).toLowerCase()) || activePlans.find(plan => plan.id === String(booking.packageId || '').toLowerCase());
   const planPrice = selectedPlan ? Number(String(selectedPlan.price ?? '').replace(/[^\d.]/g, '')) : 0;
   const basePrice = Number.isFinite(planPrice) && planPrice > 0 ? planPrice : (passType === 'DAILY' ? seatRate : passType === 'WEEKLY' ? 2100 : 7500);
-  const lockerFee = hasLocker ? (passType === 'DAILY' ? 200 : passType === 'WEEKLY' ? 300 : 1000) : 0;
+  const defaultLockerFee = passType === 'DAILY' ? 200 : passType === 'WEEKLY' ? 300 : 1000;
+  const lockerFee = hasLocker
+    ? (lockerAmount === '' ? defaultLockerFee : Math.max(0, Number(lockerAmount) || 0))
+    : 0;
   const totalAmount = basePrice + lockerFee;
   const parsedPaid = Math.min(totalAmount, Math.max(0, Number(amountPaid) || totalAmount));
   const pendingAmount = Math.max(0, totalAmount - parsedPaid);
@@ -104,6 +109,7 @@ export const ReservationConfirmModal = ({
         lockerRequired: hasLocker,
         lockerId: matchingLocker?.id || null,
         lockerNumber: matchingLocker?.lockerNumber || '',
+        lockerFee,
         totalAmount,
         amountPaid: parsedPaid,
         pendingAmount,
@@ -118,6 +124,7 @@ export const ReservationConfirmModal = ({
             assignedSeat: `Desk ${targetSeatNumber}`,
             seatNumber: targetSeatNumber,
             passType,
+            lockerFee,
             status: 'ACTIVE',
             membershipStatus: 'ACTIVE'
           });
@@ -322,6 +329,18 @@ export const ReservationConfirmModal = ({
                 </select>
               )}
             </div>
+            {hasLocker && (
+              <div style={{ marginTop: '0.65rem' }}>
+                <label style={labelStyle}>Custom Locker Amount (NPR)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={lockerAmount}
+                  onChange={e => setLockerAmount(e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+            )}
           </div>
 
           {/* Payment Details */}

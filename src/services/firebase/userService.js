@@ -60,6 +60,7 @@ export const subscribeUsers = (onUsersUpdate) => {
 
 export const createUser = async (userData) => {
   const userId = userData.id || ('usr_' + Date.now());
+  const userCode = userData.userCode || await getNextStudentReferenceCode();
   const displayName = userData.fullName || userData.name || '';
   const newUser = normalizeUser({
     id: userId,
@@ -69,6 +70,7 @@ export const createUser = async (userData) => {
     membershipStatus: 'ACTIVE',
     passType: 'DAILY',
     ...userData,
+    userCode,
     fullName: displayName,
     name: displayName,
   });
@@ -81,6 +83,23 @@ export const createUser = async (userData) => {
   saveLocalUsers([newUser, ...currentLocal]);
 
   return newUser;
+};
+
+const getNextStudentReferenceCode = async () => {
+  let users = [];
+  try {
+    const snapshot = await getDocs(collection(db, 'users'));
+    users = snapshot.docs.map(item => item.data());
+  } catch (err) {
+    users = getLocalUsers();
+  }
+
+  const highestNumber = users.reduce((highest, user) => {
+    const match = String(user.userCode || '').match(/^TQD-(\d+)$/i);
+    return match ? Math.max(highest, Number(match[1])) : highest;
+  }, 0);
+
+  return `TQD-${String(highestNumber + 1).padStart(3, '0')}`;
 };
 
 export const updateUser = async (userId, updatedFields) => {
@@ -139,20 +158,21 @@ export const findOrCreateStudentFirestore = async (studentData) => {
   }
 
   if (existingUser) {
+    const userCode = /^TQD-\d+$/i.test(existingUser.userCode || '')
+      ? existingUser.userCode.toUpperCase()
+      : await getNextStudentReferenceCode();
     const updated = {
       ...existingUser,
       ...studentData,
       id: existingUser.id,
-      userCode: existingUser.userCode || `QD-STU-${Math.floor(1000 + Math.random() * 9000)}`,
+      userCode,
       updatedAt: new Date().toISOString()
     };
     await updateUser(existingUser.id, updated);
     return { user: updated, isNew: false };
   } else {
-    const userCode = `QD-STU-${Math.floor(1000 + Math.random() * 9000)}`;
     const created = await createUser({
       ...studentData,
-      userCode,
       status: studentData.status || 'ACTIVE',
       membershipStatus: studentData.membershipStatus || 'ACTIVE',
       joinedDate: studentData.joinedDate || new Date().toISOString()

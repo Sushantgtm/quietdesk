@@ -237,6 +237,38 @@ export const approveBooking = async (bookingId, approvalData = {}) => {
     const amountPaid  = approvalData.amountPaid  !== undefined ? approvalData.amountPaid  : 0;
     const pendingAmount = Math.max(0, totalAmount - amountPaid);
     const paymentStatus = amountPaid >= totalAmount ? 'PAID' : amountPaid > 0 ? 'PARTIAL' : 'PENDING';
+    const shouldAssignLocker = approvalData.hasLocker !== undefined
+      ? approvalData.hasLocker
+      : Boolean(booking.hasLocker);
+    const targetLockerId = approvalData.lockerId || booking.lockerId;
+    let lockerSnap = null;
+
+    if (shouldAssignLocker && targetLockerId) {
+      const lockerRef = doc(db, 'lockers', targetLockerId);
+      lockerSnap = await tx.get(lockerRef);
+      if (!lockerSnap.exists()) throw new Error('Selected locker was not found.');
+
+      const locker = lockerSnap.data();
+      const alreadyAssignedToStudent = locker.status === 'ASSIGNED' &&
+        booking.userId && locker.assignedToUserId === booking.userId;
+      if (locker.status !== 'AVAILABLE' && !alreadyAssignedToStudent) {
+        throw new Error(`${locker.lockerNumber || 'Selected locker'} is no longer available.`);
+      }
+
+      tx.set(lockerRef, {
+        status: 'ASSIGNED',
+        assignedToUserId: booking.userId || null,
+        assignedToUserName: booking.userName || 'Scholar',
+        assignedToUserPhone: booking.userPhone || '',
+        assignedToUserEmail: booking.userEmail || '',
+        assignedSeatNumber: seatNumber,
+        passType,
+        lockerFee: Number(approvalData.lockerFee ?? booking.lockerFee) || 0,
+        startDate,
+        endDate,
+        updatedAt: now
+      }, { merge: true });
+    }
 
     // Update booking
     tx.update(bookingRef, {
@@ -257,8 +289,8 @@ export const approveBooking = async (bookingId, approvalData = {}) => {
       bookingTime:    approvalData.arrivalTime    || booking.arrivalTime    || '06:00 AM',
       hasLocker:      approvalData.hasLocker      !== undefined ? approvalData.hasLocker      : (booking.hasLocker || false),
       lockerRequired: approvalData.lockerRequired !== undefined ? approvalData.lockerRequired : (booking.lockerRequired || booking.hasLocker || false),
-      lockerId:       approvalData.lockerId       !== undefined ? approvalData.lockerId       : (booking.lockerId || null),
-      lockerNumber:   approvalData.hasLocker === false ? '' : (approvalData.lockerNumber || booking.lockerNumber || ''),
+      lockerId:       targetLockerId || null,
+      lockerNumber:   shouldAssignLocker ? (approvalData.lockerNumber || booking.lockerNumber || lockerSnap?.data()?.lockerNumber || '') : '',
       paymentMethod:  approvalData.paymentMethod  || 'CASH',
       approvedAt:     now,
       updatedAt:      now,

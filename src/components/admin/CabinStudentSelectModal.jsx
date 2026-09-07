@@ -135,7 +135,7 @@ export const CabinStudentSelectModal = ({
       // Synthesize full user from booking data
       return {
         id: bUserId || `usr_${currentOccupantBooking.id}`,
-        userCode: currentOccupantBooking.userCode || `QD-STU-${Math.floor(1000 + Math.random() * 9000)}`,
+        userCode: currentOccupantBooking.userCode || 'Unregistered',
         fullName: currentOccupantBooking.userName || 'Assigned Scholar',
         name: currentOccupantBooking.userName || 'Assigned Scholar',
         phone: currentOccupantBooking.userPhone || '',
@@ -162,7 +162,7 @@ export const CabinStudentSelectModal = ({
     if (cabinSeat.assignedToUserId || cabinSeat.currentStudentName || cabinSeat.studentName) {
       return {
         id: cabinSeat.assignedToUserId || `usr_seat_${cabinSeat.id}`,
-        userCode: cabinSeat.userCode || `QD-STU-${Math.floor(1000 + Math.random() * 9000)}`,
+        userCode: cabinSeat.userCode || 'Unregistered',
         fullName: cabinSeat.currentStudentName || cabinSeat.studentName || 'Assigned Scholar',
         name: cabinSeat.currentStudentName || cabinSeat.studentName || 'Assigned Scholar',
         phone: cabinSeat.studentPhone || cabinSeat.userPhone || '',
